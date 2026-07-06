@@ -1,0 +1,43 @@
+name: myvideofeed
+
+services:
+  myvideofeed:
+    container_name: myvideofeed
+    build:
+      context: .
+      dockerfile: Dockerfile.fpm
+    image: myvideofeed:fpm
+    env_file:
+      - .env
+    volumes:
+      - ./db:/app/db
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  nginx:
+    container_name: myvideofeed-nginx
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - myvideofeed
+    restart: unless-stopped
+
+  # Optional (--profile mysql). Set DB_DRIVER=mysql, DB_HOST=database in .env.
+  database:
+    container_name: database
+    image: mariadb:11
+    profiles: ["mysql"]
+    env_file:
+      - .env
+    # Derive MARIADB_* bootstrap vars from DB_* so .env is the single source.
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-myvideofeed}
+      MARIADB_USER: ${DB_USER:-myvideofeed}
+      MARIADB_PASSWORD: ${DB_PASS:-change-me}
+      MARIADB_ROOT_PASSWORD: ${DB_PASS:-change-me}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    restart: unless-stopped

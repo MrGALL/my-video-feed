@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+use App\Bootstrap;
+
+date_default_timezone_set('UTC');
+
+exit(Bootstrap::build()->cli->run($argv));

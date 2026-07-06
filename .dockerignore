@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+config.php
+vendor/
+db/*.sqlite
+logs/
+data/
+*.md
+*.png
+Dockerfile*
+compose*.yaml
+docker/

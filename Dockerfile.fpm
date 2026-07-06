@@ -1,0 +1,26 @@
+FROM php:8.3-fpm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && docker-php-ext-install pdo_mysql \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Run workers as root so bind-mounted SQLite/log dirs are writable without a host chown.
+RUN sed -i 's/^user = www-data/user = root/; s/^group = www-data/group = root/' /usr/local/etc/php-fpm.d/www.conf
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
+
+COPY . .
+
+RUN mkdir -p db logs
+
+EXPOSE 9000
+
+# -R (--allow-to-run-as-root) is required since the pool runs as root.
+CMD ["php-fpm", "-R"]
