@@ -32,7 +32,7 @@ final class RepositoryTest extends TestCase
         $repo = $this->makeRepo();
         $repo->insertChannel('UC123', 'UC123');
 
-        // Ingestor::resolveChannel relies on this to fill only the slug placeholder.
+        // Ingestor::processPoll relies on this to fill only the slug placeholder.
         $this->assertSame('UC123', $repo->findChannel('UC123')['title']);
     }
 

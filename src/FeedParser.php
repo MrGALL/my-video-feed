@@ -6,42 +6,29 @@ namespace App;
 
 final class FeedParser
 {
-    /** Synthesises a <media:group> from id + title when a push payload omits one; the rest of the pipeline requires it. */
-    public function rewriteInboundPush(string $content): string
+    /** Synthesises a trusted <entry> from API-verified fields; used for push, where the body itself isn't trusted. */
+    public function buildEntry(string $videoId, string $title, string $published): string
     {
-        preg_match('#<entry[^>]*>(.*)</entry>#sU', $content, $matches);
-        if (!isset($matches[0])) {
-            return $content;
-        }
-        $entry = trim($matches[0]);
-        $entry = preg_replace("#  <link rel=\"alternate\" hreflang=\"(.*)\"/>\n#sU", '', $entry);
-
-        if (stripos($entry, 'media:group') === false) {
-            preg_match('#<id>yt:video:(.*)</id>#sU', $entry, $idMatch);
-            preg_match('#<title>(.*)</title>#sU', $entry, $titleMatch);
-            if (isset($idMatch[1], $titleMatch[1])) {
-                $videoId = $idMatch[1];
-                $title = $titleMatch[1];
-                $thumbHost = rand(1, 4);
-                $entry = str_replace(
-                    '</entry>',
-                    ' <media:group>'
-                    . "\n   <media:title>{$title}</media:title>"
-                    . "\n   <media:content url=\"https://www.youtube.com/v/{$videoId}?version=3\" type=\"application/x-shockwave-flash\" width=\"640\" height=\"390\"/>"
-                    . "\n   <media:thumbnail url=\"https://i{$thumbHost}.ytimg.com/vi/{$videoId}/hqdefault.jpg\" width=\"480\" height=\"360\"/>"
-                    . "\n  </media:group>"
-                    . "\n</entry>",
-                    $entry,
-                );
-            }
-        }
-        return '<feed>' . $entry . '</feed>';
+        $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+        $thumbHost = rand(1, 4);
+        return '<entry>'
+            . "\n  <id>yt:video:{$videoId}</id>"
+            . "\n  <title>{$safeTitle}</title>"
+            . "\n  <link rel=\"alternate\" href=\"https://www.youtube.com/watch?v={$videoId}\"/>"
+            . "\n  <published>{$published}</published>"
+            . "\n  <media:group>"
+            . "\n   <media:title>{$safeTitle}</media:title>"
+            . "\n   <media:content url=\"https://www.youtube.com/v/{$videoId}?version=3\" type=\"application/x-shockwave-flash\" width=\"640\" height=\"390\"/>"
+            . "\n   <media:thumbnail url=\"https://i{$thumbHost}.ytimg.com/vi/{$videoId}/hqdefault.jpg\" width=\"480\" height=\"360\"/>"
+            . "\n  </media:group>"
+            . "\n </entry>";
     }
 
     public function findEntry(string $videoId, string $content): string
     {
+        $id = preg_quote($videoId, '#');
         preg_match(
-            "#<entry[^>]*>\n\s+<id>yt:video:" . $videoId . "</id>(.*)</entry>#sU",
+            "#<entry[^>]*>\n\s+<id>yt:video:" . $id . "</id>(.*)</entry>#sU",
             $content,
             $matches,
         );
@@ -53,8 +40,9 @@ final class FeedParser
 
     public function deleteEntry(string $videoId, string $content): string
     {
+        $id = preg_quote($videoId, '#');
         return preg_replace(
-            "#\s+<entry[^>]*>\n\s+<id>yt:video:" . $videoId . "</id>(.*)</entry>#sU",
+            "#\s+<entry[^>]*>\n\s+<id>yt:video:" . $id . "</id>(.*)</entry>#sU",
             '',
             $content,
         );

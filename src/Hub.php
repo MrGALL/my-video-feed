@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 /** PubSubHubbub client: subscribe to channel updates (inbound) and notify a hub of feed changes (outbound); each side enabled by its URL. */
-final class Hub
+class Hub
 {
     public function __construct(
         private readonly string $subscribeUrl = '',

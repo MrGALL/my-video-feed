@@ -13,8 +13,10 @@ vendor/bin/phpunit
 ```
 
 Tests use in-memory SQLite, so they need no database or network. CI runs the same
-suite on PHP 8.3 and 8.4. For a running instance, see the README (bare-metal or
-Docker); a good smoke-test channel id is `UC_x5XG1OV2P6uZZ5FSM9Ttw`.
+suite on PHP 8.3 and 8.4. Code that would hit the network is tested by subclassing
+`YoutubeApi` (overriding `httpGet()`) or `Hub` — see `tests/FakeYoutubeApi` and
+`tests/FakeHub`. For a running instance, see the README (bare-metal or Docker); a
+good smoke-test channel id is `UC_x5XG1OV2P6uZZ5FSM9Ttw`.
 
 ## Coding standards
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App;
 
-final class YoutubeApi
+class YoutubeApi
 {
     // Playlist form (UULF + UC suffix) per https://stackoverflow.com/a/76602819
     private const string FEED_URL = 'https://www.youtube.com/feeds/videos.xml?channel_id=%s';
@@ -29,19 +29,19 @@ final class YoutubeApi
     {
         $url = sprintf(self::FEED_URL, $slug);
         $url = str_replace('channel_id=UC', 'playlist_id=UULF', $url);
-        $body = @file_get_contents($url);
+        $body = $this->httpGet($url);
         if ($body === false) {
             throw new \RuntimeException("Failed to fetch YouTube feed for {$slug}");
         }
         return $body;
     }
 
-    /** @return array{duration: ?string, viewable: bool, channelId: ?string, title: ?string} */
+    /** @return array{duration: ?string, viewable: bool, channelId: ?string, title: ?string, published: ?string} */
     public function fetchVideoInfo(string $videoId): array
     {
         if ($this->apiKey === '') {
             // No key: skip enrichment. Videos still ingest, minus duration and livestream/private detection.
-            return ['duration' => null, 'viewable' => true, 'channelId' => null, 'title' => null];
+            return ['duration' => null, 'viewable' => true, 'channelId' => null, 'title' => null, 'published' => null];
         }
 
         $info = $this->fetchVideoJson($videoId);
@@ -58,12 +58,13 @@ final class YoutubeApi
         if (!$hasViewCount || $broadcast !== 'none' || $this->hasExcludedTag($info)) {
             $viewable = false;
         }
-        // channelId/title are null when the response has no item (unknown/removed video).
+        // channelId/title/published are null when the response has no item (unknown/removed video).
         return [
             'duration' => $duration,
             'viewable' => $viewable,
             'channelId' => $info['items'][0]['snippet']['channelId'] ?? null,
             'title' => $info['items'][0]['snippet']['title'] ?? null,
+            'published' => $info['items'][0]['snippet']['publishedAt'] ?? null,
         ];
     }
 
@@ -92,11 +93,17 @@ final class YoutubeApi
             throw new \RuntimeException('YOUTUBE_API_KEY is required to fetch video info');
         }
         $url = sprintf(self::VIDEO_INFO_URL, $videoId, $this->apiKey);
-        $body = @file_get_contents($url);
+        $body = $this->httpGet($url);
         if ($body === false) {
             throw new \RuntimeException("Failed to fetch video info for {$videoId}");
         }
-        // No @-suppression: a malformed response should fail loudly, not be silently swallowed.
+        // No @-suppression on decode: a malformed response should fail loudly, not be silently swallowed.
         return json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /** The one HTTP boundary; tests override this to serve canned bodies. */
+    protected function httpGet(string $url): string|false
+    {
+        return @file_get_contents($url);
     }
 }

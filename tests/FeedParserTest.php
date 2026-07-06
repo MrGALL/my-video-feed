@@ -9,27 +9,6 @@ use PHPUnit\Framework\TestCase;
 
 final class FeedParserTest extends TestCase
 {
-    public function testRewriteInboundPushSynthesisesMediaGroupWhenMissing(): void
-    {
-        $content = "<feed>\n<entry>\n <id>yt:video:abc12345678</id>\n <title>Test Video</title>\n</entry>\n</feed>";
-
-        $result = (new FeedParser())->rewriteInboundPush($content);
-
-        $this->assertStringContainsString('<media:group>', $result);
-        $this->assertStringContainsString('<media:title>Test Video</media:title>', $result);
-        $this->assertStringContainsString('abc12345678/hqdefault.jpg', $result);
-    }
-
-    public function testRewriteInboundPushLeavesExistingMediaGroupAlone(): void
-    {
-        $content = "<entry>\n <id>yt:video:abc12345678</id>\n <title>Test Video</title>\n"
-            . " <media:group>\n  <media:title>Test Video</media:title>\n </media:group>\n</entry>";
-
-        $result = (new FeedParser())->rewriteInboundPush($content);
-
-        $this->assertSame(1, substr_count($result, '<media:group>'));
-    }
-
     public function testFindEntryStripsDescriptionAndCommunityNodes(): void
     {
         // The stripping regex requires exact 3-space indentation before <media:description>.
@@ -80,5 +59,36 @@ final class FeedParserTest extends TestCase
         $this->assertStringContainsString('<id>https://example.com/channels</id>', $xml);
         $this->assertStringContainsString('rel="self" href="https://example.com/channels"', $xml);
         $this->assertStringNotContainsString('rel="hub"', $xml);
+    }
+
+    public function testBuildEntryEmbedsVideoIdAndThumbnail(): void
+    {
+        $entry = (new FeedParser())->buildEntry('abc12345678', 'Test Video', '2024-01-01T00:00:00Z');
+
+        $this->assertStringContainsString('<id>yt:video:abc12345678</id>', $entry);
+        $this->assertStringContainsString('abc12345678/hqdefault.jpg', $entry);
+        $this->assertStringContainsString('<published>2024-01-01T00:00:00Z</published>', $entry);
+        $this->assertStringContainsString('<media:title>Test Video</media:title>', $entry);
+    }
+
+    public function testBuildEntryEscapesTitleSoPushBodiesCannotInjectMarkup(): void
+    {
+        // A rebuilt entry never carries raw markup: even a hostile "title" is XML-escaped.
+        $entry = (new FeedParser())->buildEntry('abc12345678', '</title><script>alert(1)</script>', '2024-01-01T00:00:00Z');
+
+        $this->assertStringNotContainsString('<script>', $entry);
+        $this->assertStringContainsString('&lt;script&gt;', $entry);
+    }
+
+    public function testFindEntryTreatsVideoIdLiterallyNotAsRegex(): void
+    {
+        // Without preg_quote, the '.' would match any char and pull the wrong entry.
+        $content = "<feed>\n<entry>\n <id>yt:video:axc12345678</id>\n <title>Wrong</title>\n</entry>\n"
+            . "<entry>\n <id>yt:video:a.c12345678</id>\n <title>Right</title>\n</entry>\n</feed>";
+
+        $entry = (new FeedParser())->findEntry('a.c12345678', $content);
+
+        $this->assertStringContainsString('<title>Right</title>', $entry);
+        $this->assertStringNotContainsString('Wrong', $entry);
     }
 }

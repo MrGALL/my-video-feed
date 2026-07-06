@@ -129,4 +129,81 @@ final class FeedTest extends TestCase
         $this->assertSame(90, Feed::minutes('01:30:00'));
         $this->assertSame(5, Feed::minutes('00:05:59'));
     }
+
+    /** @param array<string, mixed> $opts */
+    private function feedWith(Repository $repo, array $opts = []): Feed
+    {
+        return new Feed(
+            repo: $repo,
+            parser: new FeedParser(),
+            minDurationSeconds: 30,
+            feedTitle: 'T',
+            feedUrl: 'https://example.com/channels',
+            hubUrl: '',
+            stripPatterns: $opts['stripPatterns'] ?? [],
+            titlePrefix: $opts['titlePrefix'] ?? '[{channel}] {title}',
+            maxTitleLength: $opts['maxTitleLength'] ?? 78,
+            upgradeThumbnail: false,
+            timezone: 'UTC',
+        );
+    }
+
+    private function seedContentVideo(Repository $repo, string $title, string $channel = 'Cool Channel', ?string $duration = null): void
+    {
+        $repo->insertChannel('UCabc', $channel);
+        $id = (int) $repo->findChannel('UCabc')['id'];
+        $content = '<entry><title>placeholder</title>'
+            . '<media:group><media:thumbnail url="https://i.ytimg.com/vi/x/hqdefault.jpg"/></media:group></entry>';
+        $repo->insertVideo($id, 'dQw4w9WgXcQ', $title, $content, $duration, gmdate('Y-m-d H:i:s'));
+    }
+
+    public function testAggregateAppliesChannelAndTitleTemplateWithDurationSuffix(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $this->seedContentVideo($repo, 'Great Video', duration: '00:10:00');
+
+        $atom = $this->feedWith($repo)->renderAggregate();
+
+        $this->assertStringContainsString('<title>[Cool Channel] Great Video (10m)</title>', $atom);
+    }
+
+    public function testAggregateStripsPatternsFromTitle(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $this->seedContentVideo($repo, '[SPONSORED] Real Title');
+
+        $atom = $this->feedWith($repo, ['titlePrefix' => '{title}', 'stripPatterns' => ['[SPONSORED] ']])->renderAggregate();
+
+        $this->assertStringContainsString('<title>Real Title</title>', $atom);
+        $this->assertStringNotContainsString('SPONSORED', $atom);
+    }
+
+    public function testAggregateTruncatesTitleToMaxLength(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $this->seedContentVideo($repo, str_repeat('A', 30));
+
+        $atom = $this->feedWith($repo, ['titlePrefix' => '{title}', 'maxTitleLength' => 20])->renderAggregate();
+
+        $this->assertStringContainsString('<title>' . str_repeat('A', 20) . '…</title>', $atom);
+    }
+
+    public function testAggregateKeepsDollarBackreferenceCharactersLiterally(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        // Without the addcslashes guard, '$5' would be read as a preg_replace backreference and vanish.
+        $this->seedContentVideo($repo, 'Cost $5 for a \\o/');
+
+        $atom = $this->feedWith($repo, ['titlePrefix' => '{title}'])->renderAggregate();
+
+        $this->assertStringContainsString('Cost $5 for a \\o/', $atom);
+    }
 }

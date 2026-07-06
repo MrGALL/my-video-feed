@@ -49,6 +49,11 @@ final class App
             echo $_GET['hub_challenge'];
             return;
         }
+        // Only real YouTube channel ids reach the ingest pipeline; anything else is a 404, no outbound work.
+        if (!self::isChannelSlug($slug)) {
+            http_response_code(404);
+            return;
+        }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $body = file_get_contents('php://input');
             if (stripos($body, '<yt:videoId>') !== false) {
@@ -61,6 +66,12 @@ final class App
         }
         $this->ingestor->processChannel($slug);
         $this->ingestor->pingChannel();
+    }
+
+    /** A well-formed YouTube channel id: 'UC' plus 22 id chars. */
+    public static function isChannelSlug(string $slug): bool
+    {
+        return preg_match('#^UC[A-Za-z0-9_-]{22}$#', $slug) === 1;
     }
 
     private function renderChannel(): void

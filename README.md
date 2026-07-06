@@ -97,7 +97,10 @@ API v3").
 **Subscriber** - set `subscriber.url` to a PubSubHubbub hub (e.g. Google's free
 public hub `pubsubhubbub.appspot.com`) and YouTube pushes new uploads to this
 app's `/<channel_id>` callback instead of waiting for the next poll. Leave it
-empty to rely on polling.
+empty to rely on polling. Pushed payloads are treated as untrusted: only the video
+id is taken from them and the feed entry is rebuilt from trusted data (with an API
+key, the video is also verified to belong to the channel), so a push can't inject
+arbitrary feed content.
 
 **Publisher** - set `publisher.url` to a hub's publish endpoint (e.g.
 [Superfeedr](https://superfeedr.com/)) to notify it when the aggregate feed
@@ -124,8 +127,7 @@ Routes live under `base_url`'s path prefix, if any.
 - `/` - HTML card grid of recent videos
 - `/channels` - the aggregate Atom feed
 - `/<channel_id>` - PubSubHubbub callback (verification GET, push POST) and
-  manual poll trigger
-- `/subscribe` - manually refresh subscriptions
+  manual poll trigger; the id must be a well-formed channel id or the request 404s
 - `/excluded`, `/included` - debug listings of blacklisted vs. included videos
 
 ## Tests
