@@ -10,6 +10,7 @@ class YoutubeApi
     private const string FEED_URL = 'https://www.youtube.com/feeds/videos.xml?channel_id=%s';
     private const string VIDEO_INFO_URL = 'https://content-youtube.googleapis.com/youtube/v3/videos'
         . '?id=%s&part=contentDetails,statistics,snippet,liveStreamingDetails&key=%s';
+    private const string SHORTS_URL = 'https://www.youtube.com/shorts/%s';
 
     /** @var list<string> Lowercased for case-insensitive matching. */
     private readonly array $excludeTags;
@@ -101,9 +102,32 @@ class YoutubeApi
         return json_decode($body, true, flags: JSON_THROW_ON_ERROR);
     }
 
+    /** /shorts/{id} answers 200 for a Short; a regular video 3xx-redirects to /watch. */
+    public function isShort(string $videoId): bool
+    {
+        return $this->httpHead(sprintf(self::SHORTS_URL, $videoId)) === 200;
+    }
+
     /** The one HTTP boundary; tests override this to serve canned bodies. */
     protected function httpGet(string $url): string|false
     {
         return @file_get_contents($url);
+    }
+
+    /** HTTP status of a HEAD request, 0 on failure; second HTTP seam, tests override it. */
+    protected function httpHead(string $url): int
+    {
+        $context = stream_context_create(['http' => [
+            'method' => 'HEAD',
+            'follow_location' => 0,   // see the redirect, don't follow it, else every video looks like 200
+            'ignore_errors' => true,  // a 3xx is the answer we want, not a failure
+            'timeout' => 5,
+            'header' => "User-Agent: Mozilla/5.0 (compatible; myvideofeed)\r\n",
+        ]]);
+        $headers = @get_headers($url, context: $context);
+        if ($headers === false || !isset($headers[0])) {
+            return 0;
+        }
+        return (int) (preg_match('#\s(\d{3})\s#', $headers[0], $m) ? $m[1] : 0);
     }
 }

@@ -22,7 +22,7 @@ final class IngestorTest extends TestCase
     private const SLUG = 'UC_x5XG1OV2P6uZZ5FSM9Ttw';
 
     /** @return array{Db, Repository, Ingestor, YoutubeApi, Hub} */
-    private function makeSetup(?YoutubeApi $api = null, ?Hub $hub = null, string $auditPath = ''): array
+    private function makeSetup(?YoutubeApi $api = null, ?Hub $hub = null, string $auditPath = '', bool $detectShorts = false): array
     {
         $db = new Db('sqlite', 'sqlite::memory:');
         $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
@@ -31,7 +31,7 @@ final class IngestorTest extends TestCase
         // Defaults: keyless (no network) + no-op Hub.
         $api ??= new YoutubeApi('', []);
         $hub ??= new Hub();
-        $ingestor = new Ingestor($repo, $api, new FeedParser(), $hub, $auditPath, 'UTC');
+        $ingestor = new Ingestor($repo, $api, new FeedParser(), $hub, $auditPath, 'UTC', $detectShorts);
         return [$db, $repo, $ingestor, $api, $hub];
     }
 
@@ -173,6 +173,78 @@ final class IngestorTest extends TestCase
         $this->assertNull($repo->findVideo('LIVE1234567'));
         $this->assertStringContainsString('LIVE1234567', file_get_contents($auditPath));
         unlink($auditPath);
+    }
+
+    // --- Shorts detection: a /shorts/{id} HEAD probe gates insertion when filter.detect_shorts is on ---
+
+    public function testDetectShortsSkipsA200ProbeAndWritesShortAudit(): void
+    {
+        $auditPath = sys_get_temp_dir() . '/mvf_audit_' . uniqid() . '.log';
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['SHRT1234567'] = FakeYoutubeApi::videoInfoJson(channelId: self::SLUG, publishedAt: gmdate('Y-m-d\TH:i:s\Z'));
+        $api->shortStatus['SHRT1234567'] = 200; // it's a Short
+        [, $repo, $ingestor] = $this->makeSetup($api, null, $auditPath, detectShorts: true);
+
+        $ingestor->processChannel(self::SLUG, $this->pushBody('SHRT1234567', 'x', gmdate('Y-m-d\TH:i:s\Z')));
+
+        $this->assertNull($repo->findVideo('SHRT1234567'), 'a 200 probe means a Short => not inserted');
+        $this->assertStringContainsString('short (SHRT1234567)', file_get_contents($auditPath));
+        unlink($auditPath);
+    }
+
+    public function testDetectShortsKeepsA303Probe(): void
+    {
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['NORM1234567'] = FakeYoutubeApi::videoInfoJson(channelId: self::SLUG, publishedAt: gmdate('Y-m-d\TH:i:s\Z'));
+        $api->shortStatus['NORM1234567'] = 303; // regular video redirects
+        [, $repo, $ingestor] = $this->makeSetup($api, null, '', detectShorts: true);
+
+        $ingestor->processChannel(self::SLUG, $this->pushBody('NORM1234567', 'x', gmdate('Y-m-d\TH:i:s\Z')));
+
+        $this->assertNotNull($repo->findVideo('NORM1234567'), 'a 3xx probe means a regular video => inserted');
+    }
+
+    public function testDetectShortsDoesNotProbeAlreadyNotViewableVideo(): void
+    {
+        $auditPath = sys_get_temp_dir() . '/mvf_audit_' . uniqid() . '.log';
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['LIVE1234567'] = FakeYoutubeApi::videoInfoJson(
+            channelId: self::SLUG,
+            publishedAt: gmdate('Y-m-d\TH:i:s\Z'),
+            liveBroadcastContent: 'live', // rejected before the probe runs
+        );
+        $api->shortStatus['LIVE1234567'] = 200; // would say "short", but the probe must never be reached
+        [, $repo, $ingestor] = $this->makeSetup($api, null, $auditPath, detectShorts: true);
+
+        $ingestor->processChannel(self::SLUG, $this->pushBody('LIVE1234567', 'x', gmdate('Y-m-d\TH:i:s\Z')));
+
+        $this->assertNull($repo->findVideo('LIVE1234567'));
+        $this->assertStringContainsString('not viewable (LIVE1234567)', file_get_contents($auditPath), 'reason is the viewability drop, not the probe');
+        unlink($auditPath);
+    }
+
+    public function testDetectShortsOffKeepsA200Probe(): void
+    {
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['SHRT1234567'] = FakeYoutubeApi::videoInfoJson(channelId: self::SLUG, publishedAt: gmdate('Y-m-d\TH:i:s\Z'));
+        $api->shortStatus['SHRT1234567'] = 200;
+        [, $repo, $ingestor] = $this->makeSetup($api); // detectShorts defaults off
+
+        $ingestor->processChannel(self::SLUG, $this->pushBody('SHRT1234567', 'x', gmdate('Y-m-d\TH:i:s\Z')));
+
+        $this->assertNotNull($repo->findVideo('SHRT1234567'), 'probe is skipped entirely when the flag is off');
+    }
+
+    public function testDetectShortsAppliesOnKeylessPollPath(): void
+    {
+        $api = new FakeYoutubeApi(); // keyless: viewable is always true, so the probe is the only filter
+        $api->shortStatus['POLL1234567'] = 200;
+        $api->feedBody = $this->pollFeed('POLL1234567', 'Ch', gmdate('Y-m-d\TH:i:s\Z'), 'https://www.youtube.com/watch?v=POLL1234567');
+        [, $repo, $ingestor] = $this->makeSetup($api, null, '', detectShorts: true);
+
+        $ingestor->processChannel(self::SLUG);
+
+        $this->assertNull($repo->findVideo('POLL1234567'), 'keyless poll still drops a Short via the probe');
     }
 
     public function testKeyedPushUpdatesExistingVideoContent(): void

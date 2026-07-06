@@ -45,6 +45,8 @@ return [
 
     'filter' => [
         'min_duration_seconds' => (int) (getenv('FILTER_MIN_DURATION_SECONDS') ?: 30),
+        // HEAD-probe youtube.com/shorts/{id} per new video; 200 => Short, skipped. Off by default (one request per video).
+        'detect_shorts' => filter_var(getenv('FILTER_DETECT_SHORTS') ?: 'false', FILTER_VALIDATE_BOOLEAN),
         // Pipe-separated substrings stripped from titles before display'.
         'strip_patterns' => array_values(array_filter(explode('|', getenv('FILTER_STRIP_PATTERNS') ?: ''))),
         'max_title_length' => (int) (getenv('FILTER_MAX_TITLE_LENGTH') ?: 78),

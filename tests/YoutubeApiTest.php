@@ -64,6 +64,16 @@ final class YoutubeApiTest extends TestCase
         $this->assertNull($api->lastUrl, 'keyless must not touch the network');
     }
 
+    public function testIsShortTrueOnlyForA200Probe(): void
+    {
+        $api = new FakeYoutubeApi();
+        $api->shortStatus = ['SHRT1234567' => 200, 'NORM1234567' => 303, 'GONE1234567' => 0];
+
+        $this->assertTrue($api->isShort('SHRT1234567'), '200 => a Short');
+        $this->assertFalse($api->isShort('NORM1234567'), '3xx redirect => a regular video');
+        $this->assertFalse($api->isShort('GONE1234567'), 'network error/timeout => not treated as a Short');
+    }
+
     public function testFetchChannelFeedSwapsChannelIdForPlaylistId(): void
     {
         $api = new FakeYoutubeApi();

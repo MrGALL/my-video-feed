@@ -14,6 +14,7 @@ final class Ingestor
         private readonly Hub $hub,
         private readonly string $auditLogPath = '',
         private readonly string $timezone = 'UTC',
+        private readonly bool $detectShorts = false,
     ) {}
 
     public function processActiveChannels(): void
@@ -142,6 +143,10 @@ final class Ingestor
             $this->appendAuditLog($videoId, $entryXml);
             return;
         }
+        if ($this->detectShorts && $this->api->isShort($videoId)) {
+            $this->appendAuditLog($videoId, $entryXml, 'short');
+            return;
+        }
         $this->repo->insertVideo(
             channelId: $channelId,
             slug: $videoId,
@@ -169,6 +174,10 @@ final class Ingestor
             $this->appendAuditLog($videoId, $entryXml);
             return;
         }
+        if ($this->detectShorts && $this->api->isShort($videoId)) {
+            $this->appendAuditLog($videoId, $entryXml, 'short');
+            return;
+        }
         $this->repo->insertVideo(
             channelId: $channelId,
             slug: $videoId,
@@ -184,7 +193,7 @@ final class Ingestor
         return preg_match('#^[A-Za-z0-9_-]{11}$#', $videoId) === 1;
     }
 
-    private function appendAuditLog(string $videoId, string $entryXml): void
+    private function appendAuditLog(string $videoId, string $entryXml, string $reason = 'not viewable'): void
     {
         if ($this->auditLogPath === '') {
             return;
@@ -196,7 +205,7 @@ final class Ingestor
         $now = (new \DateTimeImmutable('now', new \DateTimeZone($this->timezone)))->format('r');
         file_put_contents(
             $this->auditLogPath,
-            "{$now} - not viewable ({$videoId})\n{$entryXml}\n\n",
+            "{$now} - {$reason} ({$videoId})\n{$entryXml}\n\n",
             FILE_APPEND,
         );
     }

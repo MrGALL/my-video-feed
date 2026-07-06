@@ -41,7 +41,15 @@ final class Bootstrap
             publishUrl: $publishUrl,
             feedUrl: $feedUrl,
         );
-        $ingestor = new Ingestor($repo, $api, $parser, $hub, $config['audit_log'], $config['timezone']);
+        $ingestor = new Ingestor(
+            $repo,
+            $api,
+            $parser,
+            $hub,
+            $config['audit_log'],
+            $config['timezone'],
+            $config['filter']['detect_shorts'],
+        );
         $feed = new Feed(
             repo: $repo,
             parser: $parser,

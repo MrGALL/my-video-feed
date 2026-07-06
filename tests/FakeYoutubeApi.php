@@ -17,6 +17,9 @@ final class FakeYoutubeApi extends YoutubeApi
 
     public ?string $lastUrl = null;
 
+    /** @var array<string, int> videoId => HEAD status for the /shorts/ probe (default 303 = not a Short). */
+    public array $shortStatus = [];
+
     protected function httpGet(string $url): string|false
     {
         $this->lastUrl = $url;
@@ -26,6 +29,12 @@ final class FakeYoutubeApi extends YoutubeApi
             return $this->videoJson[$m[1] ?? ''] ?? '{"items":[]}';
         }
         return $this->feedBody !== '' ? $this->feedBody : false;
+    }
+
+    protected function httpHead(string $url): int
+    {
+        preg_match('#/shorts/([A-Za-z0-9_-]{11})#', $url, $m);
+        return $this->shortStatus[$m[1] ?? ''] ?? 303;
     }
 
     /** Builds a one-item videos.list JSON body; omit a field to simulate its absence. */
