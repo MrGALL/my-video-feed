@@ -25,7 +25,7 @@ final class Bootstrap
 
         $db = self::connectDb($config['db']);
         $repo = new Repository($db);
-        $api = new YoutubeApi($config['youtube_key']);
+        $api = new YoutubeApi($config['youtube_key'], $config['filter']['exclude_tags']);
         $parser = new FeedParser();
 
         $base = rtrim($config['base_url'], '/') . '/';
@@ -62,6 +62,7 @@ final class Bootstrap
             $db,
             $repo,
             $ingestor,
+            $api,
             $config['timezone'],
             $config['cron']['ingest_hours'],
             $config['cron']['subscribe_dow'],

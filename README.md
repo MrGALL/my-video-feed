@@ -84,7 +84,7 @@ Copy `config.example.php` to `config.php` (bare metal) or `.env.example` to
 | `feed.*` | Aggregate feed title |
 | `subscriber.*` | Optional PubSubHubbub subscribe; set `url` to enable, empty for poll-only |
 | `publisher.*` | Optional hub notify on change; set `url` to enable (also becomes the feed's hub link) |
-| `filter.*` | Min duration, title strip patterns, title prefix, `upgrade_thumbnail` (default off; swaps `hqdefault`→`maxres2`) |
+| `filter.*` | Min duration, title strip patterns, title prefix, `exclude_tags` (skip videos with these YouTube tags; needs API key), `upgrade_thumbnail` (default off; swaps `hqdefault`→`maxres2`) |
 | `cron.*` | Hours `cron` ingests at, and the weekly subscribe-refresh day/hour |
 | `audit_log` | Where "not viewable" skipped videos get logged |
 

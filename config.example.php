@@ -48,6 +48,8 @@ return [
         // Pipe-separated substrings stripped from titles before display'.
         'strip_patterns' => array_values(array_filter(explode('|', getenv('FILTER_STRIP_PATTERNS') ?: ''))),
         'max_title_length' => (int) (getenv('FILTER_MAX_TITLE_LENGTH') ?: 78),
+        // Pipe-separated tags; a video tagged with any is skipped (needs API key).
+        'exclude_tags' => array_values(array_filter(array_map('trim', explode('|', getenv('FILTER_EXCLUDE_TAGS') ?: '')))),
         'title_prefix' => getenv('FILTER_TITLE_PREFIX') ?: '[{channel}] {title}',
         'upgrade_thumbnail' => filter_var(getenv('FILTER_UPGRADE_THUMBNAIL') ?: 'false', FILTER_VALIDATE_BOOLEAN),
     ],
