@@ -19,7 +19,6 @@ final class App
             $route === 'channels'  => $this->renderChannel(),
             $route === 'excluded'  => $this->renderExcluded(),
             $route === 'included'  => $this->renderIncluded(),
-            $route === 'subscribe' => $this->ingestor->subscribeAll(),
             $route === ''          => $this->renderHome(),
             default                => $this->handleChannel($route),
         };
@@ -45,6 +44,8 @@ final class App
     private function handleChannel(string $slug): void
     {
         if (isset($_GET['hub_challenge'])) {
+            // Plain text so a reflected challenge can't run as HTML (XSS).
+            header('Content-Type: text/plain; charset=UTF-8');
             echo $_GET['hub_challenge'];
             return;
         }

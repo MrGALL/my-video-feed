@@ -65,6 +65,23 @@ final class FeedTest extends TestCase
         $this->assertStringNotContainsString('maxres2.jpg', $html);
     }
 
+    public function testAggregateEscapesThumbnailUrlToPreventInjection(): void
+    {
+        [$repo, $feed] = $this->makeFeed(upgradeThumbnail: false);
+        $repo->insertChannel('UCabc', 'Cool Channel');
+        $channel = $repo->findChannel('UCabc');
+        // A thumbnail URL crafted to break out of the src='' attribute the feed builds.
+        $content = "<entry><title>Vid</title>"
+            . "<media:group><media:thumbnail url=\"x' onerror='alert(1)\" /></media:group>"
+            . "</entry>";
+        $repo->insertVideo((int) $channel['id'], 'dQw4w9WgXcQ', 'Vid', $content, '00:10:00', gmdate('Y-m-d H:i:s'));
+
+        $atom = $feed->renderAggregate();
+
+        $this->assertStringContainsString('&#039; onerror=&#039;', $atom);
+        $this->assertStringNotContainsString("src='x' onerror='", $atom);
+    }
+
     public function testRenderHtmlEmptyState(): void
     {
         [, $feed] = $this->makeFeed();

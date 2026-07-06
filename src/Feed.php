@@ -158,7 +158,7 @@ h1 { font-size:1.4rem; margin:0 0 20px; }
         // Inject the media:thumbnail URL as inline HTML so readers that strip media: still preview it.
         preg_match('#media\:thumbnail url="(.*)"#sU', $content, $match);
         if (!empty($match[1])) {
-            $img = "<img src='" . $match[1] . "' />";
+            $img = "<img src='" . htmlspecialchars($match[1], ENT_QUOTES, 'UTF-8') . "' />";
             $content = str_replace(
                 '<media:group>',
                 '<content type="html"><![CDATA[ ' . $img . " ]]></content>\n  <media:group>",

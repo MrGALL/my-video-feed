@@ -20,6 +20,11 @@ final class YoutubeApi
         $this->excludeTags = array_map('mb_strtolower', $excludeTags);
     }
 
+    public function hasKey(): bool
+    {
+        return $this->apiKey !== '';
+    }
+
     public function fetchChannelFeed(string $slug): string
     {
         $url = sprintf(self::FEED_URL, $slug);
@@ -31,12 +36,12 @@ final class YoutubeApi
         return $body;
     }
 
-    /** @return array{duration: ?string, viewable: bool} */
+    /** @return array{duration: ?string, viewable: bool, channelId: ?string, title: ?string} */
     public function fetchVideoInfo(string $videoId): array
     {
         if ($this->apiKey === '') {
             // No key: skip enrichment. Videos still ingest, minus duration and livestream/private detection.
-            return ['duration' => null, 'viewable' => true];
+            return ['duration' => null, 'viewable' => true, 'channelId' => null, 'title' => null];
         }
 
         $info = $this->fetchVideoJson($videoId);
@@ -53,7 +58,13 @@ final class YoutubeApi
         if (!$hasViewCount || $broadcast !== 'none' || $this->hasExcludedTag($info)) {
             $viewable = false;
         }
-        return ['duration' => $duration, 'viewable' => $viewable];
+        // channelId/title are null when the response has no item (unknown/removed video).
+        return [
+            'duration' => $duration,
+            'viewable' => $viewable,
+            'channelId' => $info['items'][0]['snippet']['channelId'] ?? null,
+            'title' => $info['items'][0]['snippet']['title'] ?? null,
+        ];
     }
 
     /** @param array<string, mixed> $info */

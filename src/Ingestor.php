@@ -45,7 +45,9 @@ final class Ingestor
         }
         $array = json_decode(json_encode($xml), true);
 
-        $channelId = $this->resolveChannel($slug, $array);
+        // Poll bodies are trusted (HTTPS from youtube.com); push videos are API-verified below.
+        $verify = $pushBody !== null;
+        $channelId = $this->resolveChannel($slug, $array, trusted: !$verify);
 
         // Single-entry feeds come back as an associative array; normalise to a list.
         if (isset($array['entry']['id'])) {
@@ -61,32 +63,50 @@ final class Ingestor
                 $content = $this->parser->deleteEntry($videoId, $content);
                 continue;
             }
-            $this->saveEntry($videoId, $channelId, $entry, $content);
+            $this->saveEntry($videoId, $channelId, $entry, $content, $verify, $slug);
         }
         $this->repo->touchChannel($slug);
         $this->repo->refreshChannelPublishedTimes();
     }
 
-    private function resolveChannel(string $slug, array $array): int
+    private function resolveChannel(string $slug, array $array, bool $trusted): int
     {
+        // No auto-insert: channels come only from `channel:add`, so a web hit to an unknown slug can't create one.
         $channel = $this->repo->findChannel($slug);
-        if ($channel === null) {
-            $this->repo->insertChannel($slug, $array['author']['name'] ?? $slug);
-            $channel = $this->repo->findChannel($slug);
-        }
         if ($channel === null || empty($channel['active'])) {
             throw new \RuntimeException("Channel {$slug} not active");
         }
         $channelId = (int) $channel['id'];
-        // Self-heals a placeholder title (e.g. from `channel:add`) once the real name is known.
-        if (!empty($array['author']['name'])) {
+        // Self-heal a placeholder title from the real feed; trusted poll only, as a push name is attacker-controlled.
+        if ($trusted && !empty($array['author']['name'])) {
             $this->repo->updateChannelTitle($channelId, $array['author']['name']);
         }
         return $channelId;
     }
 
-    private function saveEntry(string $videoId, int $channelId, array $entryData, string $rawContent): void
-    {
+    private function saveEntry(
+        string $videoId,
+        int $channelId,
+        array $entryData,
+        string $rawContent,
+        bool $verify,
+        string $expectedSlug,
+    ): void {
+        $info = null;
+        // Push path: verify the video exists and is owned by this channel, and trust the API's title over the body's.
+        if ($verify && $this->api->hasKey()) {
+            $info = $this->api->fetchVideoInfo($videoId);
+            if ($info['channelId'] === null) {
+                return; // unknown to the API yet; the next poll catches a real one.
+            }
+            if ($info['channelId'] !== $expectedSlug) {
+                return; // forged push: video belongs to another channel.
+            }
+            if ($info['title'] !== null) {
+                $entryData['title'] = $info['title'];
+            }
+        }
+
         $video = $this->repo->findVideo($videoId);
         // Drop the +00:00 offset; treat the remainder as UTC.
         [$publishedNaive] = explode('+', str_replace('T', ' ', $entryData['published']));
@@ -97,7 +117,7 @@ final class Ingestor
             return;
         }
 
-        $info = $this->api->fetchVideoInfo($videoId);
+        $info ??= $this->api->fetchVideoInfo($videoId);
         if (!$info['viewable']) {
             $this->appendAuditLog($videoId, $entryXml);
             return;
