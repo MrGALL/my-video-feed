@@ -29,7 +29,7 @@ final class Repository
     public function findChannel(string $slug): ?array
     {
         return $this->db->fetchOne(
-            'SELECT id, active FROM myvideofeed_channels WHERE slug = ?',
+            'SELECT id, active, title FROM myvideofeed_channels WHERE slug = ?',
             [$slug],
         );
     }

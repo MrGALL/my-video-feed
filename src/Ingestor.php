@@ -77,8 +77,8 @@ final class Ingestor
             throw new \RuntimeException("Channel {$slug} not active");
         }
         $channelId = (int) $channel['id'];
-        // Self-heal a placeholder title from the real feed; trusted poll only, as a push name is attacker-controlled.
-        if ($trusted && !empty($array['author']['name'])) {
+        // Fill from the feed only while the title is still the slug placeholder (keeps healed/manual names); trusted poll only.
+        if ($trusted && $channel['title'] === $slug && !empty($array['author']['name'])) {
             $this->repo->updateChannelTitle($channelId, $array['author']['name']);
         }
         return $channelId;

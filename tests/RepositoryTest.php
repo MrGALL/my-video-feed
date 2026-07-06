@@ -27,6 +27,15 @@ final class RepositoryTest extends TestCase
         $this->assertSame('Title A', $repo->allChannels()[0]['title']);
     }
 
+    public function testFindChannelExposesTitleForPlaceholderCheck(): void
+    {
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'UC123');
+
+        // Ingestor::resolveChannel relies on this to fill only the slug placeholder.
+        $this->assertSame('UC123', $repo->findChannel('UC123')['title']);
+    }
+
     public function testInsertVideoIgnoresDuplicateSlug(): void
     {
         $repo = $this->makeRepo();
