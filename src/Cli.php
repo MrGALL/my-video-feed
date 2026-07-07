@@ -74,16 +74,8 @@ final class Cli
             fwrite(STDERR, "Usage: bin/myvideofeed video:info <video_id>\n");
             return 1;
         }
-        $info = $this->api->fetchVideoJson($videoId);
-        // Drop the long descriptions. Index write, not `as &$v`: that would mutate a copy from `?? []`.
-        foreach ($info['items'] ?? [] as $i => $item) {
-            if (isset($item['snippet']['description'])) {
-                $info['items'][$i]['snippet']['description'] = '[REMOVED]';
-            }
-            if (isset($item['snippet']['localized']['description'])) {
-                $info['items'][$i]['snippet']['localized']['description'] = '[REMOVED]';
-            }
-        }
+        $info = $this->api->fetchVideoInfo($videoId);
+        $info['short'] = $this->api->isShort($videoId);
         echo json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
         return 0;
     }
@@ -165,7 +157,7 @@ final class Cli
           cron                     Hourly entrypoint: ingest at configured hours, subscribe on the configured day/hour
           ingest                   Force-process all active channels now
           subscribe                Force-refresh PubSubHubbub subscriptions now
-          video:info <video_id>    Print the raw YouTube Data API videos.list JSON for one video (needs YOUTUBE_API_KEY)
+          video:info <video_id>    Print the video info (duration, viewability, channel, short flag)
           channel:add <id>         Add a channel by its YouTube channel id (UC...)
           channel:list             List channels
           blacklist:add <term>     Add a title-match term to the blacklist
