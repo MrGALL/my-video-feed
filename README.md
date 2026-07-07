@@ -16,7 +16,8 @@ default; MySQL/MariaDB is optional.
 - Single aggregate Atom feed (`/channels`) and HTML page (`/`) across all
   subscribed channels, with title cleanup, duration display, and optional
   thumbnail upgrade.
-- Title-substring blacklist and a minimum-duration filter to drop Shorts.
+- Title-substring blacklist plus minimum-duration and `detect_shorts` filters to
+  drop Shorts.
 - Optional YouTube Data API v3 key for accurate duration and to skip
   livestreams/private videos.
 - Optional PubSubHubbub subscriber (instant inbound updates) and publisher
@@ -84,14 +85,15 @@ Copy `config.example.php` to `config.php` (bare metal) or `.env.example` to
 | `feed.*` | Aggregate feed title |
 | `subscriber.*` | Optional PubSubHubbub subscribe; set `url` to enable, empty for poll-only |
 | `publisher.*` | Optional hub notify on change; set `url` to enable (also becomes the feed's hub link) |
-| `filter.*` | Min duration, title strip patterns, title prefix, `exclude_tags` (skip videos with these YouTube tags; needs API key), `upgrade_thumbnail` (default off; swaps `hqdefault`→`maxres2`) |
+| `filter.*` | Min duration, title strip patterns, title prefix, `exclude_tags`, `upgrade_thumbnail`, `detect_shorts` |
 | `cron.*` | Hours `cron` ingests at, and the weekly subscribe-refresh day/hour |
 | `audit_log` | Where "not viewable" skipped videos get logged |
 
 **Optional YouTube API key** - without it, videos still ingest but with duration
 unknown and no livestream/private detection, so the short-video filter and `(Nm)`
-suffix don't apply. Get a free key from the
-[Google Cloud Console](https://console.cloud.google.com/) (enable "YouTube Data
+suffix don't apply; `detect_shorts` still works, as it needs no key. Get a free key
+from the
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials) (enable "YouTube Data
 API v3").
 
 **Subscriber** - set `subscriber.url` to a PubSubHubbub hub (e.g. Google's free
@@ -114,6 +116,7 @@ bin/myvideofeed db:init                  Create the schema for the configured dr
 bin/myvideofeed cron                     Hourly entrypoint (respects cron.* gating)
 bin/myvideofeed ingest                   Force-process all active channels now
 bin/myvideofeed subscribe                Force-refresh PubSubHubbub subscriptions now
+bin/myvideofeed video:info <id>          Print derived info for one video (duration, viewability, short flag)
 bin/myvideofeed channel:add <id>         Add a channel by YouTube channel id (UC...)
 bin/myvideofeed channel:list             List channels
 bin/myvideofeed blacklist:add <term>     Add a title-match term to the blacklist

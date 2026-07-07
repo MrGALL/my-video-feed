@@ -10,7 +10,8 @@ class YoutubeApi
     private const string FEED_URL = 'https://www.youtube.com/feeds/videos.xml?channel_id=%s';
     private const string VIDEO_INFO_URL = 'https://content-youtube.googleapis.com/youtube/v3/videos'
         . '?id=%s&part=contentDetails,statistics,snippet,liveStreamingDetails&key=%s';
-    private const string SHORTS_URL = 'https://www.youtube.com/shorts/%s';
+    // ucbcb=1 skips the EU cookie-consent 302 so the probe sees the real 200/3xx.
+    private const string SHORTS_URL = 'https://www.youtube.com/shorts/%s?ucbcb=1';
 
     /** @var list<string> Lowercased for case-insensitive matching. */
     private readonly array $excludeTags;
@@ -102,7 +103,7 @@ class YoutubeApi
         return json_decode($body, true, flags: JSON_THROW_ON_ERROR);
     }
 
-    /** /shorts/{id} answers 200 for a Short; a regular video 3xx-redirects to /watch. */
+    /** /shorts/{id}?ucbcb=1 answers 200 for a Short; a regular video 3xx-redirects to /watch. */
     public function isShort(string $videoId): bool
     {
         return $this->httpHead(sprintf(self::SHORTS_URL, $videoId)) === 200;
