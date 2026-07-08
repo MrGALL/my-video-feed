@@ -43,22 +43,27 @@ final class App
 
     private function handleChannel(string $slug): void
     {
+        // Validate first: an unknown route neither reflects hub_challenge nor does outbound work — a plain 404.
+        if (!self::isChannelSlug($slug)) {
+            http_response_code(404);
+            return;
+        }
         if (isset($_GET['hub_challenge'])) {
             // Plain text so a reflected challenge can't run as HTML (XSS).
             header('Content-Type: text/plain; charset=UTF-8');
             echo $_GET['hub_challenge'];
             return;
         }
-        // Only real YouTube channel ids reach the ingest pipeline; anything else is a 404, no outbound work.
-        if (!self::isChannelSlug($slug)) {
-            http_response_code(404);
-            return;
-        }
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $body = file_get_contents('php://input');
             if (stripos($body, '<yt:videoId>') !== false) {
-                $this->ingestor->processChannel($slug, $body);
-                $this->ingestor->pingChannel();
+                try {
+                    $this->ingestor->processChannel($slug, $body);
+                    $this->ingestor->pingChannel();
+                } catch (\Throwable $e) {
+                    // Swallow so the hub still gets 'ok' and stops retrying; the failure is logged.
+                    error_log("[myvideofeed] push {$slug}: " . $e->getMessage());
+                }
             }
             // Always 'ok' so the hub stops retrying, even for payloads we ignored.
             echo 'ok';

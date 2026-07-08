@@ -311,6 +311,57 @@ final class IngestorTest extends TestCase
         $this->assertNull($repo->findVideo('POLL1234567'));
     }
 
+    // --- poll debounce: a recently-polled channel is a cheap no-op (guards unauthenticated GET force-ingest) ---
+
+    public function testPollIsDebouncedWhenChannelUpdatedRecently(): void
+    {
+        $api = new FakeYoutubeApi();
+        $api->feedBody = $this->pollFeed('POLL1234567', 'Ch', gmdate('Y-m-d\TH:i:s\Z'), 'https://www.youtube.com/watch?v=POLL1234567');
+        [, $repo, $ingestor] = $this->makeSetup($api);
+        $repo->touchChannel(self::SLUG); // updated = now
+
+        $ingestor->processChannel(self::SLUG); // poll
+
+        $this->assertNull($repo->findVideo('POLL1234567'), 'a channel polled within the window is skipped');
+        $this->assertNull($api->lastUrl, 'no outbound feed fetch happens when debounced');
+    }
+
+    public function testPollProceedsWhenChannelUpdatedIsStale(): void
+    {
+        $api = new FakeYoutubeApi();
+        $api->feedBody = $this->pollFeed('POLL1234567', 'Ch', gmdate('Y-m-d\TH:i:s\Z'), 'https://www.youtube.com/watch?v=POLL1234567');
+        [$db, $repo, $ingestor] = $this->makeSetup($api);
+        // Older than the 10-minute debounce window.
+        $db->execute('UPDATE myvideofeed_channels SET updated = ? WHERE slug = ?', [gmdate('Y-m-d H:i:s', time() - 1200), self::SLUG]);
+
+        $ingestor->processChannel(self::SLUG);
+
+        $this->assertNotNull($repo->findVideo('POLL1234567'), 'a stale channel is polled normally');
+    }
+
+    public function testPushIsNotDebounced(): void
+    {
+        [, $repo, $ingestor] = $this->makeSetup();
+        $repo->touchChannel(self::SLUG); // updated = now: would debounce a poll, but push must still ingest
+
+        $ingestor->processChannel(self::SLUG, $this->pushBody('PUSH1234567', 'x', gmdate('Y-m-d\TH:i:s\Z')));
+
+        $this->assertNotNull($repo->findVideo('PUSH1234567'), 'push carries a new video and must not be debounced');
+    }
+
+    public function testPollUpdateOfExistingVideoDoesNotCallTheApi(): void
+    {
+        $api = new FakeYoutubeApi('key'); // keyed: a new video would trigger a videos.list call
+        $api->feedBody = $this->pollFeed('POLL1234567', 'Ch', gmdate('Y-m-d\TH:i:s\Z'), 'https://www.youtube.com/watch?v=POLL1234567');
+        [, $repo, $ingestor] = $this->makeSetup($api);
+        $repo->insertVideo((int) $repo->findChannel(self::SLUG)['id'], 'POLL1234567', 'Old', '<old/>', null, gmdate('Y-m-d H:i:s'));
+
+        $ingestor->processChannel(self::SLUG); // poll; the video already exists so it's an update
+
+        $this->assertNotNull($repo->findVideo('POLL1234567'));
+        $this->assertStringNotContainsString('googleapis.com', (string) $api->lastUrl, 'an existing-video update must not hit the Data API');
+    }
+
     // --- shouldPublish: the pure hub-ping decision ---
 
     public function testShouldPublishTrueForRecentNonBlacklistedVideo(): void

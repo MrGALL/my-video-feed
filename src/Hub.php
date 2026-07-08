@@ -21,9 +21,7 @@ class Hub
         if ($this->subscribeUrl === '') {
             return;
         }
-        $ch = curl_init($this->subscribeUrl);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, [
+        [$ok, , $err] = $this->post($this->subscribeUrl, [
             'hub.callback' => $this->callbackBase . $channelSlug,
             'hub.mode' => 'subscribe',
             'hub.topic' => $this->topicBase . $channelSlug,
@@ -32,9 +30,6 @@ class Hub
             'hub.secret' => '',
             'hub.verify_token' => '',
         ]);
-        $ok = curl_exec($ch);
-        $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
-        curl_close($ch);
         if ($ok === false || $err !== null) {
             throw new \RuntimeException("subscribe error for {$channelSlug}: " . ($err ?? 'curl_exec returned false'));
         }
@@ -45,22 +40,23 @@ class Hub
         if ($this->publishUrl === '') {
             return;
         }
-        $ch = curl_init($this->publishUrl);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt(
-            $ch,
-            CURLOPT_POSTFIELDS,
-            'hub.mode=publish&hub.url=' . urlencode($this->feedUrl),
-        );
-        $ok = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
-        curl_close($ch);
+        [$ok, $httpcode, $err] = $this->post($this->publishUrl, 'hub.mode=publish&hub.url=' . urlencode($this->feedUrl));
         if ($ok === false || $err !== null) {
             throw new \RuntimeException('publish error: ' . ($err ?? 'curl_exec returned false'));
         }
         if ($httpcode !== 204) {
             throw new \RuntimeException("publish error (HTTP {$httpcode})");
         }
+    }
+
+    /**
+     * The one network boundary; tests override this to record calls and return canned responses.
+     *
+     * @param array<string, scalar>|string $fields
+     * @return array{0: string|bool, 1: int, 2: ?string} [curl result, HTTP status, error or null]
+     */
+    protected function post(string $url, array|string $fields): array
+    {
+        return Http::post($url, $fields);
     }
 }

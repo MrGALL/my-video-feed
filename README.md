@@ -87,7 +87,7 @@ Copy `config.example.php` to `config.php` (bare metal) or `.env.example` to
 | `publisher.*` | Optional hub notify on change; set `url` to enable (also becomes the feed's hub link) |
 | `filter.*` | Min duration, title strip patterns, title prefix, `exclude_tags`, `upgrade_thumbnail`, `detect_shorts` |
 | `cron.*` | Hours `cron` ingests at, and the weekly subscribe-refresh day/hour |
-| `audit_log` | Where "not viewable" skipped videos get logged |
+| `audit_log` | Where skipped videos (not-viewable or a detected Short) get logged |
 
 **Optional YouTube API key** - without it, videos still ingest but with duration
 unknown and no livestream/private detection, so the short-video filter and `(Nm)`
@@ -130,15 +130,21 @@ Routes live under `base_url`'s path prefix, if any.
 - `/` - HTML card grid of recent videos
 - `/channels` - the aggregate Atom feed
 - `/<channel_id>` - PubSubHubbub callback (verification GET, push POST) and
-  manual poll trigger; the id must be a well-formed channel id or the request 404s
+  manual poll trigger; the id must be a well-formed channel id or the request 404s.
+  Polls are debounced (a channel polled within the last ~10 min is a no-op); pushes
+  are not
 - `/excluded`, `/included` - debug listings of blacklisted vs. included videos
 
-## Tests
+## Development
 
 ```
 composer install
-vendor/bin/phpunit
+composer check     # PSR-12 lint + PHPStan (level 6) + PHPUnit
 ```
+
+Or run the steps individually: `composer test`, `composer lint` (`composer lint:fix`
+to autofix), `composer analyse`. Tests use in-memory SQLite and run fully offline; CI
+runs the same checks on PHP 8.3 and 8.4.
 
 ## License
 

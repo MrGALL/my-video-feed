@@ -48,17 +48,21 @@ final class Feed
         return (int) $parse['hours'] * 60 + (int) $parse['mins'];
     }
 
+    /** @return list<array<string, mixed>> Recent channel videos with the excluded ones removed. */
+    private function visibleRecentVideos(): array
+    {
+        $blacklist = $this->repo->blacklistTerms();
+        return array_values(array_filter(
+            $this->repo->recentVideosForChannel(),
+            fn (array $video): bool => !self::isExcluded($video, $blacklist, $this->minDurationSeconds),
+        ));
+    }
+
     public function renderAggregate(): string
     {
-        $videos = $this->repo->recentVideosForChannel();
-        $blacklist = $this->repo->blacklistTerms();
         $published = null;
         $content = '';
-
-        foreach ($videos as $video) {
-            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds)) {
-                continue;
-            }
+        foreach ($this->visibleRecentVideos() as $video) {
             $video['content'] = $this->decorateContent($video);
             $published ??= gmdate('c', strtotime($video['published']));
             $content .= ' ' . $video['content'] . "\n";
@@ -76,12 +80,8 @@ final class Feed
     /** Self-contained HTML page of the same recent videos, as a responsive card grid. */
     public function renderHtml(): string
     {
-        $blacklist = $this->repo->blacklistTerms();
         $cards = '';
-        foreach ($this->repo->recentVideosForChannel() as $video) {
-            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds)) {
-                continue;
-            }
+        foreach ($this->visibleRecentVideos() as $video) {
             $cards .= $this->card($video);
         }
         if ($cards === '') {
@@ -124,6 +124,7 @@ h1 { font-size:1.4rem; margin:0 0 20px; }
 ';
     }
 
+    /** @param array<string, mixed> $video */
     private function card(array $video): string
     {
         $slug = rawurlencode($video['slug']);
@@ -151,6 +152,7 @@ h1 { font-size:1.4rem; margin:0 0 20px; }
             . '</div></a>' . "\n";
     }
 
+    /** @param array<string, mixed> $video */
     private function decorateContent(array $video): string
     {
         $content = $video['content'];
@@ -196,33 +198,36 @@ h1 { font-size:1.4rem; margin:0 0 20px; }
 
     public function renderExcluded(): string
     {
-        $out = '';
-        $videos = $this->repo->recentVideosByPublished30d();
-        $blacklist = $this->repo->blacklistTerms();
-        foreach ($videos as $video) {
-            if (!self::isExcluded($video, $blacklist, $this->minDurationSeconds)) {
-                continue;
-            }
-            $out .= $this->summaryLine($video) . "\n";
-        }
-        return $out;
+        return $this->summaryLines($this->repo->recentVideosByPublished30d(), keepExcluded: true, stripTitles: false);
     }
 
     public function renderIncluded(): string
     {
-        $out = '';
-        $videos = $this->repo->recentVideosByUpdated30d();
+        return $this->summaryLines($this->repo->recentVideosByUpdated30d(), keepExcluded: false, stripTitles: true);
+    }
+
+    /**
+     * One summary line per video, keeping either the excluded or the included set.
+     *
+     * @param list<array<string, mixed>> $videos
+     */
+    private function summaryLines(array $videos, bool $keepExcluded, bool $stripTitles): string
+    {
         $blacklist = $this->repo->blacklistTerms();
+        $out = '';
         foreach ($videos as $video) {
-            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds)) {
+            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds) !== $keepExcluded) {
                 continue;
             }
-            $video['title'] = str_replace($this->stripPatterns, '', $video['title']);
+            if ($stripTitles) {
+                $video['title'] = str_replace($this->stripPatterns, '', $video['title']);
+            }
             $out .= $this->summaryLine($video) . "\n";
         }
         return $out;
     }
 
+    /** @param array<string, mixed> $video */
     private function summaryLine(array $video): string
     {
         $line = '(' . $video['published'] . ') [' . $video['channel'] . '] ' . $video['title'];

@@ -7,6 +7,8 @@ namespace App;
 /** Shared ingestion logic used by the CLI cron/ingest commands and the web PubSubHubbub callback route. */
 final class Ingestor
 {
+    private const int POLL_DEBOUNCE_SECONDS = 600;
+
     public function __construct(
         private readonly Repository $repo,
         private readonly YoutubeApi $api,
@@ -44,6 +46,10 @@ final class Ingestor
         $channelId = (int) $channel['id'];
 
         if ($pushBody === null) {
+            // Debounce polls so a public GET can't force repeated fetches within the window; push is never debounced.
+            if (self::updatedWithinSeconds($channel['updated'] ?? null, self::POLL_DEBOUNCE_SECONDS)) {
+                return;
+            }
             $this->processPoll($slug, $channelId, (string) $channel['title']);
         } else {
             $this->processPush($slug, $channelId, $pushBody);
@@ -52,26 +58,29 @@ final class Ingestor
         $this->repo->refreshChannelPublishedTimes();
     }
 
+    /** True if $updated (stored UTC 'Y-m-d H:i:s') is within $seconds of now; null/empty never is. */
+    private static function updatedWithinSeconds(?string $updated, int $seconds): bool
+    {
+        if ($updated === null || $updated === '') {
+            return false;
+        }
+        return strtotime($updated . ' UTC') > time() - $seconds;
+    }
+
     /** Poll path: the feed is trusted (HTTPS from youtube.com), so its entry XML is stored as-is. */
     private function processPoll(string $slug, int $channelId, string $currentTitle): void
     {
         $content = $this->api->fetchChannelFeed($slug);
-        // LIBXML_NONET: never resolve external references while parsing (defence in depth; no NOENT).
-        $xml = simplexml_load_string($content, \SimpleXMLElement::class, LIBXML_NONET);
-        if ($xml === false) {
+        $array = $this->parseEntries($content, suppressWarnings: false);
+        if ($array === null) {
             throw new \RuntimeException("Invalid feed XML for {$slug}");
         }
-        $array = json_decode(json_encode($xml), true);
 
         // Fill the title from the feed only while it's still the slug placeholder (keeps healed/manual names).
         if ($currentTitle === $slug && !empty($array['author']['name'])) {
             $this->repo->updateChannelTitle($channelId, $array['author']['name']);
         }
 
-        // Single-entry feeds come back as an associative array; normalise to a list.
-        if (isset($array['entry']['id'])) {
-            $array['entry'] = [$array['entry']];
-        }
         foreach ($array['entry'] ?? [] as $entry) {
             $href = $entry['link']['@attributes']['href'] ?? '';
             if ($href === '' || stripos($href, 'watch') === false) {
@@ -92,14 +101,10 @@ final class Ingestor
     /** Push path: body is untrusted, so content is always rebuilt via buildEntry (never stored raw); a key adds ownership verification. */
     private function processPush(string $slug, int $channelId, string $body): void
     {
-        // @-suppressed: a malformed hostile push is simply dropped, not logged as a warning.
-        $xml = @simplexml_load_string($body, \SimpleXMLElement::class, LIBXML_NONET);
-        if ($xml === false) {
+        // A malformed hostile push is simply dropped (warnings suppressed), not logged.
+        $array = $this->parseEntries($body, suppressWarnings: true);
+        if ($array === null) {
             return;
-        }
-        $array = json_decode(json_encode($xml), true);
-        if (isset($array['entry']['id'])) {
-            $array['entry'] = [$array['entry']];
         }
         foreach ($array['entry'] ?? [] as $entry) {
             $videoId = str_replace('yt:video:', '', (string) ($entry['id'] ?? ''));
@@ -110,6 +115,29 @@ final class Ingestor
             $published = isset($entry['published']) && is_string($entry['published']) ? $entry['published'] : '';
             $this->savePushEntry($slug, $channelId, $videoId, $title, $published);
         }
+    }
+
+    /**
+     * Parse feed/push XML into a decoded array, normalising a single `<entry>` to a one-item list.
+     * Poll passes false (throws upstream on null); push passes true to drop malformed bodies silently.
+     *
+     * @return array<string, mixed>|null null on parse failure
+     */
+    private function parseEntries(string $xml, bool $suppressWarnings): ?array
+    {
+        // LIBXML_NONET: never resolve external references while parsing (defence in depth; no NOENT).
+        $parsed = $suppressWarnings
+            ? @simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET)
+            : simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET);
+        if ($parsed === false) {
+            return null;
+        }
+        $array = json_decode(json_encode($parsed), true);
+        // Single-entry feeds come back as an associative array; normalise to a list.
+        if (isset($array['entry']['id'])) {
+            $array['entry'] = [$array['entry']];
+        }
+        return $array;
     }
 
     private function savePushEntry(string $slug, int $channelId, string $videoId, string $title, string $published): void
@@ -134,11 +162,39 @@ final class Ingestor
         }
         $entryXml = $this->parser->buildEntry($videoId, $title, gmdate('Y-m-d\TH:i:s\Z', $ts));
 
+        // Push already resolved viewability/duration above (the key also verified ownership).
+        $this->persistEntry($channelId, $videoId, $title, $entryXml, gmdate('Y-m-d H:i:s', $ts), fn (): array => [$viewable, $duration]);
+    }
+
+    /** @param array<string, mixed> $entryData */
+    private function savePollEntry(string $videoId, int $channelId, array $entryData, string $rawContent): void
+    {
+        // Drop the +00:00 offset; treat the remainder as UTC.
+        [$publishedNaive] = explode('+', str_replace('T', ' ', $entryData['published']));
+        $entryXml = $this->parser->findEntry($videoId, $rawContent);
+        $published = gmdate('Y-m-d H:i:s', strtotime($publishedNaive . ' UTC'));
+
+        // Enrich lazily: the poll feed re-lists every recent video, so only new ones should hit the API.
+        $this->persistEntry($channelId, $videoId, $entryData['title'], $entryXml, $published, function () use ($videoId): array {
+            $info = $this->api->fetchVideoInfo($videoId);
+            return [$info['viewable'], $info['duration']];
+        });
+    }
+
+    /**
+     * Shared save tail: update an existing row, else gate on viewability + Shorts before insert.
+     * $enrich (run only for a new row) yields [viewable, duration], so poll updates skip the API.
+     *
+     * @param callable(): array{bool, ?string} $enrich
+     */
+    private function persistEntry(int $channelId, string $videoId, string $title, string $entryXml, string $published, callable $enrich): void
+    {
         $video = $this->repo->findVideo($videoId);
         if ($video !== null) {
             $this->repo->updateVideo((int) $video['id'], $title, $entryXml);
             return;
         }
+        [$viewable, $duration] = $enrich();
         if (!$viewable) {
             $this->appendAuditLog($videoId, $entryXml);
             return;
@@ -153,38 +209,7 @@ final class Ingestor
             title: $title,
             content: $entryXml,
             duration: $duration,
-            published: gmdate('Y-m-d H:i:s', $ts),
-        );
-    }
-
-    private function savePollEntry(string $videoId, int $channelId, array $entryData, string $rawContent): void
-    {
-        $video = $this->repo->findVideo($videoId);
-        // Drop the +00:00 offset; treat the remainder as UTC.
-        [$publishedNaive] = explode('+', str_replace('T', ' ', $entryData['published']));
-        $entryXml = $this->parser->findEntry($videoId, $rawContent);
-
-        if ($video !== null) {
-            $this->repo->updateVideo((int) $video['id'], $entryData['title'], $entryXml);
-            return;
-        }
-
-        $info = $this->api->fetchVideoInfo($videoId);
-        if (!$info['viewable']) {
-            $this->appendAuditLog($videoId, $entryXml);
-            return;
-        }
-        if ($this->detectShorts && $this->api->isShort($videoId)) {
-            $this->appendAuditLog($videoId, $entryXml, 'short');
-            return;
-        }
-        $this->repo->insertVideo(
-            channelId: $channelId,
-            slug: $videoId,
-            title: $entryData['title'],
-            content: $entryXml,
-            duration: $info['duration'],
-            published: gmdate('Y-m-d H:i:s', strtotime($publishedNaive . ' UTC')),
+            published: $published,
         );
     }
 

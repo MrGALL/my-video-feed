@@ -20,8 +20,13 @@ final class Bootstrap
         if (!is_file($configPath)) {
             throw new \RuntimeException("Config file not found: {$configPath}");
         }
-        /** @var array<string, mixed> $config */
         $config = require $configPath;
+        if (!is_array($config)) {
+            throw new \RuntimeException("Config file did not return an array: {$configPath}");
+        }
+        // Default absent optional keys, then fail fast on a missing required key with a clear message.
+        $config = self::deepMerge(self::defaults(), $config);
+        self::validateRequired($config);
 
         $db = self::connectDb($config['db']);
         $repo = new Repository($db);
@@ -78,6 +83,80 @@ final class Bootstrap
         );
 
         return new self($app, $cli);
+    }
+
+    /**
+     * Fallbacks for every optional key; `base_url` and `db.driver` are absent here, so required.
+     *
+     * @return array<string, mixed>
+     */
+    private static function defaults(): array
+    {
+        $root = dirname(__DIR__);
+        return [
+            'timezone' => 'UTC',
+            'youtube_key' => '',
+            'db' => [
+                'path' => "{$root}/db/myvideofeed.sqlite",
+                'host' => 'localhost',
+                'port' => 3306,
+                'name' => 'myvideofeed',
+                'user' => 'myvideofeed',
+                'pass' => '',
+            ],
+            'feed' => ['title' => 'My Video Feed'],
+            'subscriber' => [
+                'url' => '',
+                'topic_base' => 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=',
+                'lease_seconds' => (3600 * 168) - 1,
+            ],
+            'publisher' => ['url' => ''],
+            'filter' => [
+                'min_duration_seconds' => 30,
+                'detect_shorts' => false,
+                'strip_patterns' => [],
+                'max_title_length' => 78,
+                'exclude_tags' => [],
+                'title_prefix' => '[{channel}] {title}',
+                'upgrade_thumbnail' => false,
+            ],
+            'cron' => [
+                'ingest_hours' => [9, 12, 15, 18],
+                'subscribe_dow' => 1,
+                'subscribe_hour' => 5,
+            ],
+            'audit_log' => "{$root}/logs/audit.log",
+        ];
+    }
+
+    /**
+     * Overlay $overrides onto $defaults: config wins per key, nested sections merge, extra keys pass through.
+     *
+     * @param array<string, mixed> $defaults
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private static function deepMerge(array $defaults, array $overrides): array
+    {
+        foreach ($overrides as $key => $value) {
+            if (is_array($value) && isset($defaults[$key]) && is_array($defaults[$key])) {
+                $defaults[$key] = self::deepMerge($defaults[$key], $value);
+            } else {
+                $defaults[$key] = $value;
+            }
+        }
+        return $defaults;
+    }
+
+    /** @param array<string, mixed> $config */
+    private static function validateRequired(array $config): void
+    {
+        if (empty($config['base_url'])) {
+            throw new \RuntimeException('Config error: required key "base_url" is missing or empty.');
+        }
+        if (empty($config['db']['driver'])) {
+            throw new \RuntimeException('Config error: required key "db.driver" is missing or empty.');
+        }
     }
 
     /** @param array<string, mixed> $db */

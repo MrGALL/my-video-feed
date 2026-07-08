@@ -6,8 +6,13 @@ namespace App;
 
 final class Repository
 {
+    // Shared by every recentVideos* read; each caller appends its own window + ORDER BY.
+    private const string FROM_VIDEOS =
+        'FROM myvideofeed_videos AS v LEFT JOIN myvideofeed_channels AS c ON c.id=channel_id';
+
     public function __construct(private readonly Db $db) {}
 
+    /** @return list<array<string, mixed>> */
     public function activeChannelsToProcess(): array
     {
         // Never-processed channels (updated IS NULL) are due immediately, like ones idle 10+ minutes.
@@ -18,6 +23,7 @@ final class Repository
         );
     }
 
+    /** @return list<array<string, mixed>> */
     public function subscribableChannels(): array
     {
         return $this->db->fetchAll(
@@ -26,10 +32,11 @@ final class Repository
         );
     }
 
+    /** @return array<string, mixed>|null */
     public function findChannel(string $slug): ?array
     {
         return $this->db->fetchOne(
-            'SELECT id, active, title FROM myvideofeed_channels WHERE slug = ?',
+            'SELECT id, active, title, updated FROM myvideofeed_channels WHERE slug = ?',
             [$slug],
         );
     }
@@ -77,6 +84,7 @@ final class Repository
         );
     }
 
+    /** @return array<string, mixed>|null */
     public function findVideo(string $slug): ?array
     {
         return $this->db->fetchOne(
@@ -117,46 +125,55 @@ final class Repository
         );
     }
 
+    /** @return list<array<string, mixed>> */
     public function recentVideosForChannel(): array
     {
         $cutoff = gmdate('Y-m-d H:i:s', time() - 5 * 86400);
         return $this->db->fetchAll(
             'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, content, v.published '
-            . 'FROM myvideofeed_videos AS v LEFT JOIN myvideofeed_channels AS c ON c.id=channel_id '
-            . 'WHERE active = ? AND v.updated > ? ORDER BY v.published DESC',
+            . self::FROM_VIDEOS
+            . ' WHERE active = ? AND v.updated > ? ORDER BY v.published DESC',
             [1, $cutoff],
         );
     }
 
+    /** @return list<array<string, mixed>> */
     public function recentVideosByPublished30d(): array
     {
-        $cutoff = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
-        return $this->db->fetchAll(
-            'SELECT v.id, v.title, v.duration, c.title as channel, v.published '
-            . 'FROM myvideofeed_videos AS v LEFT JOIN myvideofeed_channels AS c ON c.id=channel_id '
-            . 'WHERE active = ? AND v.published > ? ORDER BY v.published DESC',
-            [1, $cutoff],
-        );
+        return $this->recentVideos30d('v.published');
     }
 
+    /** @return list<array<string, mixed>> */
     public function recentVideosByUpdated30d(): array
+    {
+        return $this->recentVideos30d('v.updated');
+    }
+
+    /**
+     * The 30-day listing for /excluded and /included; they differ only by sort column.
+     *
+     * @param string $orderColumn trusted internal literal ('v.published'|'v.updated'), never user input
+     * @return list<array<string, mixed>>
+     */
+    private function recentVideos30d(string $orderColumn): array
     {
         $cutoff = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
         return $this->db->fetchAll(
             'SELECT v.id, v.title, v.duration, c.title as channel, v.published '
-            . 'FROM myvideofeed_videos AS v LEFT JOIN myvideofeed_channels AS c ON c.id=channel_id '
-            . 'WHERE active = ? AND v.published > ? ORDER BY v.updated DESC',
+            . self::FROM_VIDEOS
+            . ' WHERE active = ? AND v.published > ? ORDER BY ' . $orderColumn . ' DESC',
             [1, $cutoff],
         );
     }
 
+    /** @return list<array<string, mixed>> */
     public function recentVideosForPing(): array
     {
         $cutoff = gmdate('Y-m-d H:i:s', time() - 14 * 86400);
         return $this->db->fetchAll(
-            'SELECT v.id, v.title, v.updated FROM myvideofeed_videos AS v '
-            . 'LEFT JOIN myvideofeed_channels AS c ON c.id=channel_id '
-            . 'WHERE active = ? AND v.published > ? ORDER BY v.updated DESC',
+            'SELECT v.id, v.title, v.updated '
+            . self::FROM_VIDEOS
+            . ' WHERE active = ? AND v.published > ? ORDER BY v.updated DESC',
             [1, $cutoff],
         );
     }

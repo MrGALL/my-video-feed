@@ -42,16 +42,35 @@ final class Cli
     private function cron(): int
     {
         $now = new \DateTimeImmutable('now', new \DateTimeZone($this->timezone));
-        $dow = (int) $now->format('N');
-        $hour = (int) $now->format('G');
+        $action = self::cronAction(
+            (int) $now->format('N'),
+            (int) $now->format('G'),
+            $this->subscribeDow,
+            $this->subscribeHour,
+            $this->ingestHours,
+        );
+        return match ($action) {
+            'subscribe' => $this->subscribe(),
+            'ingest' => $this->ingest(),
+            default => 0,
+        };
+    }
 
-        if ($dow === $this->subscribeDow && $hour === $this->subscribeHour) {
-            return $this->subscribe();
+    /**
+     * Pure hourly-gate decision: 'subscribe' on the lease day/hour, 'ingest' on a configured
+     * ingest hour, else 'none'. Split out from the clock so it can be tested directly.
+     *
+     * @param list<int> $ingestHours
+     */
+    public static function cronAction(int $dow, int $hour, int $subscribeDow, int $subscribeHour, array $ingestHours): string
+    {
+        if ($dow === $subscribeDow && $hour === $subscribeHour) {
+            return 'subscribe';
         }
-        if (in_array($hour, $this->ingestHours, true)) {
-            $this->ingestor->processActiveChannels();
+        if (in_array($hour, $ingestHours, true)) {
+            return 'ingest';
         }
-        return 0;
+        return 'none';
     }
 
     private function ingest(): int

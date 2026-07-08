@@ -37,7 +37,11 @@ final class FakeYoutubeApi extends YoutubeApi
         return $this->shortStatus[$m[1] ?? ''] ?? 303;
     }
 
-    /** Builds a one-item videos.list JSON body; omit a field to simulate its absence. */
+    /**
+     * Builds a one-item videos.list JSON body; omit a field to simulate its absence.
+     *
+     * @param list<string> $tags
+     */
     public static function videoInfoJson(
         string $channelId,
         string $title = 'API Title',

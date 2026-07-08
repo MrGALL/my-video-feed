@@ -28,6 +28,10 @@ final class Db
         return $this->driver;
     }
 
+    /**
+     * @param array<int|string, scalar|null> $params
+     * @return array<string, mixed>|null
+     */
     public function fetchOne(string $sql, array $params = []): ?array
     {
         $stmt = $this->pdo->prepare($sql);
@@ -36,6 +40,10 @@ final class Db
         return $row === false ? null : $row;
     }
 
+    /**
+     * @param array<int|string, scalar|null> $params
+     * @return list<array<string, mixed>>
+     */
     public function fetchAll(string $sql, array $params = []): array
     {
         $stmt = $this->pdo->prepare($sql);
@@ -43,13 +51,18 @@ final class Db
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** @param array<int|string, scalar|null> $params */
     public function execute(string $sql, array $params = []): void
     {
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
     }
 
-    /** Prefixes an "INTO ... VALUES (...)" clause with the driver's ignore-duplicate syntax. */
+    /**
+     * Prefixes an "INTO ... VALUES (...)" clause with the driver's ignore-duplicate syntax.
+     *
+     * @param array<int|string, scalar|null> $params
+     */
     public function insertIgnore(string $intoClause, array $params = []): void
     {
         $prefix = $this->driver === 'sqlite' ? 'INSERT OR IGNORE' : 'INSERT IGNORE';

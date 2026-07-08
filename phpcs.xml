@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="myvideofeed">
+    <description>PSR-12 for myvideofeed, keeping the codebase's compact empty-constructor idiom.</description>
+
+    <file>src</file>
+    <file>tests</file>
+    <file>public</file>
+    <file>bin</file>
+
+    <arg name="colors"/>
+    <arg value="sp"/>
+    <!-- The 120-char rule is a soft limit (warning); report it but don't fail CI on it. -->
+    <config name="ignore_warnings_on_exit" value="1"/>
+
+    <rule ref="PSR12">
+        <!-- Keep the codebase's compact `) {}` empty promoted-constructor idiom. -->
+        <exclude name="Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore"/>
+        <exclude name="Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine"/>
+    </rule>
+</ruleset>
