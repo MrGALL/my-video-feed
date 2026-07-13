@@ -109,6 +109,13 @@ final class Cli
         }
         $this->repo->insertChannel($slug, $slug);
         echo "Added channel {$slug}\n";
+        try {
+            $this->ingestor->processChannel($slug);
+            $this->ingestor->pingChannel();
+        } catch (\Throwable $e) {
+            error_log("[myvideofeed] channel:add {$slug}: " . $e->getMessage());
+            fwrite(STDERR, "Warning: added but initial processing failed: " . $e->getMessage() . "\n");
+        }
         return 0;
     }
 
