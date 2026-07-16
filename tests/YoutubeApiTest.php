@@ -52,6 +52,26 @@ final class YoutubeApiTest extends TestCase
         $this->assertFalse($api->fetchVideoInfo('VID12345678')['viewable']);
     }
 
+    public function testFetchVideoInfoThrowsOnApiErrorResponse(): void
+    {
+        // A quota/outage response must not be read as "not viewable".
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['VID12345678'] = json_encode(['error' => ['message' => 'quota exceeded']], JSON_THROW_ON_ERROR);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('quota exceeded');
+        $api->fetchVideoInfo('VID12345678');
+    }
+
+    public function testNotViewableWhenNoItemsInResponse(): void
+    {
+        // Genuine "unknown/removed video" shape must still resolve as not-viewable, not throw.
+        $api = new FakeYoutubeApi('key');
+        $api->videoJson['VID12345678'] = json_encode(['items' => []], JSON_THROW_ON_ERROR);
+
+        $this->assertFalse($api->fetchVideoInfo('VID12345678')['viewable']);
+    }
+
     public function testKeylessReturnsDefaultsWithoutAnyHttpCall(): void
     {
         $api = new FakeYoutubeApi(); // no key

@@ -27,3 +27,5 @@ CREATE TABLE IF NOT EXISTS myvideofeed_videos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_myvideofeed_videos_channel_id ON myvideofeed_videos (channel_id);
+CREATE INDEX IF NOT EXISTS idx_myvideofeed_videos_updated ON myvideofeed_videos (updated);
+CREATE INDEX IF NOT EXISTS idx_myvideofeed_videos_published ON myvideofeed_videos (published);

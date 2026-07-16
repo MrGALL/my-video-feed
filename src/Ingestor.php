@@ -86,16 +86,23 @@ final class Ingestor
             if ($href === '' || stripos($href, 'watch') === false) {
                 continue;
             }
-            $videoId = str_replace('yt:video:', '', $entry['id']);
+            $videoId = str_replace('yt:video:', '', self::stringField($entry, 'id'));
             if (!self::isValidVideoId($videoId)) {
                 continue;
             }
-            if (strtotime($entry['published']) < time() - 3600 * 24 * 14) {
+            $published = self::stringField($entry, 'published');
+            if ($published !== '' && strtotime($published) < time() - 3600 * 24 * 14) {
                 $content = $this->parser->deleteEntry($videoId, $content);
                 continue;
             }
-            $this->savePollEntry($videoId, $channelId, $entry, $content);
+            $this->savePollEntry($videoId, $channelId, $entry, $content, $published);
         }
+    }
+
+    /** @param array<string, mixed> $entry SimpleXML decodes an empty element to [], not '' — guard before a string cast. */
+    private static function stringField(array $entry, string $key, string $default = ''): string
+    {
+        return isset($entry[$key]) && is_string($entry[$key]) ? $entry[$key] : $default;
     }
 
     /** Push path: body is untrusted, so content is always rebuilt via buildEntry (never stored raw); a key adds ownership verification. */
@@ -107,12 +114,12 @@ final class Ingestor
             return;
         }
         foreach ($array['entry'] ?? [] as $entry) {
-            $videoId = str_replace('yt:video:', '', (string) ($entry['id'] ?? ''));
+            $videoId = str_replace('yt:video:', '', self::stringField($entry, 'id'));
             if (!self::isValidVideoId($videoId)) {
                 continue;
             }
-            $title = isset($entry['title']) && is_string($entry['title']) ? $entry['title'] : $videoId;
-            $published = isset($entry['published']) && is_string($entry['published']) ? $entry['published'] : '';
+            $title = self::stringField($entry, 'title', $videoId);
+            $published = self::stringField($entry, 'published');
             $this->savePushEntry($slug, $channelId, $videoId, $title, $published);
         }
     }
@@ -167,15 +174,21 @@ final class Ingestor
     }
 
     /** @param array<string, mixed> $entryData */
-    private function savePollEntry(string $videoId, int $channelId, array $entryData, string $rawContent): void
+    private function savePollEntry(string $videoId, int $channelId, array $entryData, string $rawContent, string $rawPublished): void
     {
-        // Drop the +00:00 offset; treat the remainder as UTC.
-        [$publishedNaive] = explode('+', str_replace('T', ' ', $entryData['published']));
+        $title = self::stringField($entryData, 'title', $videoId);
         $entryXml = $this->parser->findEntry($videoId, $rawContent);
-        $published = gmdate('Y-m-d H:i:s', strtotime($publishedNaive . ' UTC'));
+        if ($rawPublished === '') {
+            // Missing <published>: stamp as ingested now rather than drop a real video over it.
+            $published = gmdate('Y-m-d H:i:s');
+        } else {
+            // Drop the +00:00 offset; treat the remainder as UTC.
+            [$publishedNaive] = explode('+', str_replace('T', ' ', $rawPublished));
+            $published = gmdate('Y-m-d H:i:s', strtotime($publishedNaive . ' UTC'));
+        }
 
         // Enrich lazily: the poll feed re-lists every recent video, so only new ones should hit the API.
-        $this->persistEntry($channelId, $videoId, $entryData['title'], $entryXml, $published, function () use ($videoId): array {
+        $this->persistEntry($channelId, $videoId, $title, $entryXml, $published, function () use ($videoId): array {
             $info = $this->api->fetchVideoInfo($videoId);
             return [$info['viewable'], $info['duration']];
         });

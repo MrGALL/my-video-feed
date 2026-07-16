@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.5 - 2026-07-16
+Fix silent ingest failures on malformed poll entries and API errors; add missing indexes.
+
 ## 0.5.4 - 2026-07-16
 Order videos by ingest time, not publish time.
 

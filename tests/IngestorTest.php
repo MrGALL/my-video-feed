@@ -266,11 +266,12 @@ final class IngestorTest extends TestCase
 
     // --- poll path: the fetched feed is trusted, so its entry XML is stored as-is ---
 
-    private function pollFeed(string $videoId, string $author, string $published, string $href): string
+    private function pollFeed(string $videoId, string $author, string $published, string $href, ?string $title = null): string
     {
+        $title ??= 'Poll Video';
         return "<feed xmlns:yt=\"http://www.youtube.com/xml/schemas/2015\" xmlns:media=\"http://search.yahoo.com/mrss/\">\n"
             . " <author><name>{$author}</name></author>\n"
-            . " <entry>\n  <id>yt:video:{$videoId}</id>\n  <title>Poll Video</title>\n"
+            . " <entry>\n  <id>yt:video:{$videoId}</id>\n  <title>{$title}</title>\n"
             . "  <link rel=\"alternate\" href=\"{$href}\"/>\n  <published>{$published}</published>\n"
             . "  <media:group>\n   <media:thumbnail url=\"https://i1.ytimg.com/vi/{$videoId}/hqdefault.jpg\"/>\n  </media:group>\n"
             . " </entry>\n</feed>";
@@ -309,6 +310,40 @@ final class IngestorTest extends TestCase
         $ingestor->processChannel(self::SLUG);
 
         $this->assertNull($repo->findVideo('POLL1234567'));
+    }
+
+    public function testPollWithEmptyTitleIngestsUnderVideoIdInsteadOfSkippingTheChannel(): void
+    {
+        // An empty <title> must not TypeError and skip every entry on this channel.
+        $api = new FakeYoutubeApi();
+        $api->feedBody = $this->pollFeed(
+            'POLL1234567',
+            'Ch',
+            gmdate('Y-m-d\TH:i:s\Z'),
+            'https://www.youtube.com/watch?v=POLL1234567',
+            title: '',
+        );
+        [$db, $repo, $ingestor] = $this->makeSetup($api);
+
+        $ingestor->processChannel(self::SLUG);
+
+        $this->assertNotNull($repo->findVideo('POLL1234567'), 'channel must not be skipped over a single empty title');
+        $title = $db->fetchOne('SELECT title FROM myvideofeed_videos WHERE slug = ?', ['POLL1234567'])['title'];
+        $this->assertSame('POLL1234567', $title, 'falls back to the videoId, same as the push path');
+    }
+
+    public function testPollWithEmptyPublishedIngestsDatedNowInsteadOfSkippingTheChannel(): void
+    {
+        // An empty <published> must fall back to now, not TypeError.
+        $api = new FakeYoutubeApi();
+        $api->feedBody = $this->pollFeed('POLL1234567', 'Ch', '', 'https://www.youtube.com/watch?v=POLL1234567');
+        [$db, $repo, $ingestor] = $this->makeSetup($api);
+
+        $ingestor->processChannel(self::SLUG);
+
+        $this->assertNotNull($repo->findVideo('POLL1234567'));
+        $published = $db->fetchOne('SELECT published FROM myvideofeed_videos WHERE slug = ?', ['POLL1234567'])['published'];
+        $this->assertGreaterThan(gmdate('Y-m-d H:i:s', time() - 60), $published);
     }
 
     // --- poll debounce: a recently-polled channel is a cheap no-op (guards unauthenticated GET force-ingest) ---

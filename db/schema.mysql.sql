@@ -30,5 +30,7 @@ CREATE TABLE IF NOT EXISTS `myvideofeed_videos` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `slug` (`slug`),
   KEY `channel_id` (`channel_id`),
+  KEY `updated` (`updated`),
+  KEY `published` (`published`),
   CONSTRAINT `myvideofeed_videos_ibfk_1` FOREIGN KEY (`channel_id`) REFERENCES `myvideofeed_channels` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

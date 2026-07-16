@@ -47,6 +47,11 @@ class YoutubeApi
         }
 
         $info = $this->fetchVideoJson($videoId);
+        // A quota/outage error is valid JSON with no 'items' key — distinct from a genuine empty-items response.
+        if (isset($info['error']) || !isset($info['items'])) {
+            $message = is_string($info['error']['message'] ?? null) ? $info['error']['message'] : 'malformed response';
+            throw new \RuntimeException("YouTube API error for {$videoId}: {$message}");
+        }
 
         $duration = null;
         $viewable = true;
