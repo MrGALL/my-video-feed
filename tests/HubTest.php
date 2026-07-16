@@ -47,9 +47,20 @@ final class HubTest extends TestCase
         $hub = $this->recordingHub(publishUrl: 'https://hub.example/', feedUrl: 'https://me.example/channels');
         $hub->response = [true, 204, null];
 
-        $hub->publish();
+        $result = $hub->publish();
 
+        $this->assertTrue($result);
         $this->assertSame('hub.mode=publish&hub.url=https%3A%2F%2Fme.example%2Fchannels', $hub->lastFields);
+    }
+
+    public function testPublishReturnsFalseWithoutAUrl(): void
+    {
+        $hub = $this->recordingHub(); // empty publishUrl => publishing disabled
+
+        $result = $hub->publish();
+
+        $this->assertFalse($result);
+        $this->assertNull($hub->lastUrl, 'no configured url => no outbound call');
     }
 
     public function testPublishThrowsOnNon204(): void

@@ -46,16 +46,17 @@ final class CliTest extends TestCase
 
     // --- channel:add: adding a channel should ingest it immediately, not wait for the next cron ---
 
-    /** @return array{Cli, Repository, FakeYoutubeApi} */
-    private function makeCli(?FakeYoutubeApi $api = null): array
+    /** @return array{Cli, Repository, FakeYoutubeApi, FakeHub} */
+    private function makeCli(?FakeYoutubeApi $api = null, ?FakeHub $hub = null): array
     {
         $db = new Db('sqlite', 'sqlite::memory:');
         $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
         $repo = new Repository($db);
         $api ??= new FakeYoutubeApi();
-        $ingestor = new Ingestor($repo, $api, new FeedParser(), new FakeHub(), '', 'UTC', false);
+        $hub ??= new FakeHub();
+        $ingestor = new Ingestor($repo, $api, new FeedParser(), $hub, '', 'UTC', false);
         $cli = new Cli($db, $repo, $ingestor, $api, 'UTC', self::INGEST_HOURS, 1, 5);
-        return [$cli, $repo, $api];
+        return [$cli, $repo, $api, $hub];
     }
 
     private function pollFeed(string $videoId, string $href): string
@@ -94,5 +95,46 @@ final class CliTest extends TestCase
 
         $this->assertSame(0, $exit, 'the channel is added even if the immediate ingest fails');
         $this->assertNotNull($repo->findChannel(self::SLUG), 'the channel row still exists');
+    }
+
+    // --- publish: force a hub ping, bypassing shouldPublish()'s 600s gate ---
+
+    public function testPublishPingsTheHub(): void
+    {
+        [$cli, , , $hub] = $this->makeCli();
+
+        ob_start();
+        $exit = $cli->run(['bin/myvideofeed', 'publish']);
+        ob_end_clean();
+
+        $this->assertSame(0, $exit);
+        $this->assertSame(1, $hub->published);
+    }
+
+    public function testPublishReportsAndExitsNonZeroWhenHubDisabled(): void
+    {
+        $hub = new FakeHub();
+        $hub->publishEnabled = false;
+        [$cli] = $this->makeCli(hub: $hub);
+
+        ob_start();
+        $exit = $cli->run(['bin/myvideofeed', 'publish']);
+        $output = ob_get_clean();
+
+        $this->assertSame(1, $exit);
+        $this->assertSame('', $output);
+    }
+
+    public function testPublishExitsNonZeroWhenHubThrows(): void
+    {
+        $hub = new FakeHub();
+        $hub->throwOnPublish = true;
+        [$cli] = $this->makeCli(hub: $hub);
+
+        ob_start();
+        $exit = $cli->run(['bin/myvideofeed', 'publish']);
+        ob_end_clean();
+
+        $this->assertSame(1, $exit);
     }
 }

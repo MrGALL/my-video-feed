@@ -16,6 +16,12 @@ final class FakeHub extends Hub
     /** Slug for which subscribe() should throw, to test loop resilience. */
     public ?string $throwOn = null;
 
+    /** publish() returns this: false simulates an unconfigured publisher.url. */
+    public bool $publishEnabled = true;
+
+    /** When true, publish() throws instead of succeeding. */
+    public bool $throwOnPublish = false;
+
     public function subscribe(string $channelSlug): void
     {
         if ($channelSlug === $this->throwOn) {
@@ -24,8 +30,15 @@ final class FakeHub extends Hub
         $this->subscribed[] = $channelSlug;
     }
 
-    public function publish(): void
+    public function publish(): bool
     {
+        if ($this->throwOnPublish) {
+            throw new \RuntimeException('publish failed');
+        }
+        if (!$this->publishEnabled) {
+            return false;
+        }
         $this->published++;
+        return true;
     }
 }

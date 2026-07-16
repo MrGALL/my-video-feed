@@ -35,10 +35,11 @@ class Hub
         }
     }
 
-    public function publish(): void
+    /** @return bool false when disabled (no publishUrl), true once sent. */
+    public function publish(): bool
     {
         if ($this->publishUrl === '') {
-            return;
+            return false;
         }
         [$ok, $httpcode, $err] = $this->post($this->publishUrl, 'hub.mode=publish&hub.url=' . urlencode($this->feedUrl));
         if ($ok === false || $err !== null) {
@@ -47,6 +48,7 @@ class Hub
         if ($httpcode !== 204) {
             throw new \RuntimeException("publish error (HTTP {$httpcode})");
         }
+        return true;
     }
 
     /**

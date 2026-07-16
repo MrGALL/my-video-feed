@@ -19,9 +19,7 @@ final class Http
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         // Keep 4xx/5xx bodies (e.g. Data API 403-quota) readable, not collapsed to false.
         curl_setopt($ch, CURLOPT_FAILONERROR, false);
-        $body = curl_exec($ch);
-        curl_close($ch);
-        return $body;
+        return curl_exec($ch);
     }
 
     /** HEAD returning the HTTP status; 0 on transport failure. */
@@ -31,9 +29,7 @@ final class Http
         curl_setopt($ch, CURLOPT_NOBODY, true);           // HEAD
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);  // see the 3xx, don't follow it — else every video looks like 200
         curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        return $status;
+        return (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     }
 
     /**
@@ -50,7 +46,6 @@ final class Http
         $result = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_errno($ch) !== 0 ? curl_error($ch) : null;
-        curl_close($ch);
         return [$result, $status, $err];
     }
 

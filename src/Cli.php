@@ -28,6 +28,7 @@ final class Cli
             'cron' => $this->cron(),
             'ingest' => $this->ingest(),
             'subscribe' => $this->subscribe(),
+            'publish' => $this->publish(),
             'video:info' => $this->videoInfo($args),
             'channel:add' => $this->channelAdd($args),
             'channel:list' => $this->channelList(),
@@ -82,6 +83,22 @@ final class Cli
     private function subscribe(): int
     {
         $this->ingestor->subscribeAll();
+        return 0;
+    }
+
+    /** Force-notify the publisher hub, bypassing pingChannel()'s shouldPublish() gate. */
+    private function publish(): int
+    {
+        try {
+            if (!$this->ingestor->publishNow()) {
+                fwrite(STDERR, "publisher.url not configured; nothing sent\n");
+                return 1;
+            }
+        } catch (\Throwable $e) {
+            fwrite(STDERR, 'publish failed: ' . $e->getMessage() . "\n");
+            return 1;
+        }
+        echo "Published to hub.\n";
         return 0;
     }
 
@@ -183,6 +200,7 @@ final class Cli
           cron                     Hourly entrypoint: ingest at configured hours, subscribe on the configured day/hour
           ingest                   Force-process all active channels now
           subscribe                Force-refresh PubSubHubbub subscriptions now
+          publish                  Force-notify the publisher hub now
           video:info <video_id>    Print the video info (duration, viewability, channel, short flag)
           channel:add <id>         Add a channel by its YouTube channel id (UC...)
           channel:list             List channels

@@ -243,6 +243,12 @@ final class Ingestor
         $this->repo->clearOldVideoContent();
     }
 
+    /** Ungated hub ping for the `publish` command; pingChannel() is the shouldPublish()-gated path. */
+    public function publishNow(): bool
+    {
+        return $this->hub->publish();
+    }
+
     /**
      * Ping the hub only if the newest non-blacklisted video was updated within the window.
      *

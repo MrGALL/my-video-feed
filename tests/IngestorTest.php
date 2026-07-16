@@ -383,6 +383,20 @@ final class IngestorTest extends TestCase
         $this->assertFalse(Ingestor::shouldPublish($videos, []));
     }
 
+    // --- publishNow: bypasses shouldPublish() entirely ---
+
+    public function testPublishNowPingsUnconditionally(): void
+    {
+        // No video activity: pingChannel()'s shouldPublish() gate would refuse here.
+        $hub = new FakeHub();
+        [, , $ingestor] = $this->makeSetup(hub: $hub);
+
+        $result = $ingestor->publishNow();
+
+        $this->assertTrue($result);
+        $this->assertSame(1, $hub->published);
+    }
+
     // --- subscribeAll: one failing subscription must not block the rest ---
 
     public function testSubscribeAllContinuesAfterOneFailure(): void
