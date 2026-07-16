@@ -230,7 +230,11 @@ final class FeedTest extends TestCase
         $this->assertStringContainsString('Cost $5 for a \\o/', $atom);
     }
 
-    /** Inserts a video with independent publish/ingest dates. @return string the published datetime used */
+    /**
+     * Inserts a video with independent publish/ingest dates.
+     *
+     * @return array{published: string, updated: string}
+     */
     private function seedOrderedVideo(
         Repository $repo,
         Db $db,
@@ -239,14 +243,14 @@ final class FeedTest extends TestCase
         string $title,
         int $publishedDaysAgo,
         int $ingestedDaysAgo,
-    ): string {
+    ): array {
         $content = '<entry><title>placeholder</title>'
             . '<media:group><media:thumbnail url="https://i.ytimg.com/vi/x/hqdefault.jpg"/></media:group></entry>';
         $published = gmdate('Y-m-d H:i:s', time() - $publishedDaysAgo * 86400);
         $updated = gmdate('Y-m-d H:i:s', time() - $ingestedDaysAgo * 86400);
         $repo->insertVideo($channelId, $slug, $title, $content, null, $published);
         $db->execute('UPDATE myvideofeed_videos SET updated = ? WHERE slug = ?', [$updated, $slug]);
-        return $published;
+        return ['published' => $published, 'updated' => $updated];
     }
 
     public function testAggregateOrdersEntriesByIngestTimeNotPublishTime(): void
@@ -266,7 +270,7 @@ final class FeedTest extends TestCase
         $this->assertLessThan(strpos($atom, 'New Upload'), strpos($atom, 'Old Upload'));
     }
 
-    public function testAggregateFeedUpdatedIsNewestPublishedNotFirstRow(): void
+    public function testAggregatePublishedIsNewestPublishedNotFirstRow(): void
     {
         $db = new Db('sqlite', 'sqlite::memory:');
         $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
@@ -276,10 +280,36 @@ final class FeedTest extends TestCase
 
         // Ingested first (so second in document order) but published most recently.
         $this->seedOrderedVideo($repo, $db, $channelId, 'oldpublish02', 'Old Upload', 10, 1);
-        $newestPublished = $this->seedOrderedVideo($repo, $db, $channelId, 'newpublish02', 'New Upload', 1, 2);
+        $newest = $this->seedOrderedVideo($repo, $db, $channelId, 'newpublish02', 'New Upload', 1, 2);
 
         $atom = $this->feedWith($repo)->renderAggregate();
 
-        $this->assertStringContainsString('<updated>' . gmdate('c', strtotime($newestPublished)) . '</updated>', $atom);
+        $this->assertStringContainsString(
+            '<published>' . gmdate('c', strtotime($newest['published'])) . '</published>',
+            $atom,
+        );
+    }
+
+    public function testAggregateUpdatedIsNewestIngestTimeNotPublishTime(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $repo->insertChannel('UCabc', 'Cool Channel');
+        $channelId = (int) $repo->findChannel('UCabc')['id'];
+
+        // Published most recently but ingested first: <updated> must track ingest time, not published.
+        $this->seedOrderedVideo($repo, $db, $channelId, 'oldpublish03', 'Old Upload', 1, 5);
+        $newest = $this->seedOrderedVideo($repo, $db, $channelId, 'newpublish03', 'New Upload', 10, 2);
+
+        $atom = $this->feedWith($repo)->renderAggregate();
+
+        $this->assertStringContainsString(
+            '<updated>' . gmdate('c', strtotime($newest['updated'])) . '</updated>',
+            $atom,
+        );
+        preg_match('#<published>(.*)</published>#', $atom, $publishedMatch);
+        preg_match('#<updated>(.*)</updated>#', $atom, $updatedMatch);
+        $this->assertNotSame($updatedMatch[1], $publishedMatch[1]);
     }
 }

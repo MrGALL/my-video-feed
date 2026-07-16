@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.6 - 2026-07-16
+Make the feed's `<updated>` track ingest time instead of duplicating `<published>`.
+
 ## 0.5.5 - 2026-07-16
 Fix silent ingest failures on malformed poll entries and API errors; add missing indexes.
 

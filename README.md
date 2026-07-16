@@ -150,7 +150,7 @@ runs the same checks on PHP 8.3 and 8.4.
 
 ## Changelog
 
-**0.5.5** - Fix silent ingest failures on malformed poll entries and API errors; add missing indexes.
+**0.5.6** - Make the feed's `<updated>` track ingest time instead of duplicating `<published>`.
 
 Full history in [CHANGELOG.md](CHANGELOG.md).
 

@@ -36,6 +36,7 @@ final class FeedParserTest extends TestCase
     {
         $xml = (new FeedParser())->renderAtomFeed(
             '<entry/>',
+            '2024-01-02T00:00:00+00:00',
             '2024-01-01T00:00:00+00:00',
             'My Feed',
             'https://example.com/channels',
@@ -44,12 +45,15 @@ final class FeedParserTest extends TestCase
 
         $this->assertStringContainsString('<title>My Feed</title>', $xml);
         $this->assertStringContainsString('rel="hub" href="https://hub.example.com/"', $xml);
+        $this->assertStringContainsString('<updated>2024-01-02T00:00:00+00:00</updated>', $xml);
+        $this->assertStringContainsString('<published>2024-01-01T00:00:00+00:00</published>', $xml);
     }
 
     public function testRenderAtomFeedUsesSameUrlForIdAndSelfLink(): void
     {
         $xml = (new FeedParser())->renderAtomFeed(
             '<entry/>',
+            null,
             null,
             'My Feed',
             'https://example.com/channels',

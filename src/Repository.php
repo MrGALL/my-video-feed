@@ -131,7 +131,7 @@ final class Repository
     {
         $cutoff = gmdate('Y-m-d H:i:s', time() - 5 * 86400);
         return $this->db->fetchAll(
-            'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, v.content, v.published '
+            'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, v.content, v.published, v.updated '
             . self::FROM_VIDEOS
             . ' WHERE active = ? AND v.updated > ? AND v.content IS NOT NULL'
             . ' ORDER BY v.updated DESC, v.published DESC',

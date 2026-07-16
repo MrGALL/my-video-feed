@@ -50,6 +50,7 @@ final class FeedParser
 
     public function renderAtomFeed(
         string $entries,
+        ?string $updated,
         ?string $published,
         string $title,
         string $url,
@@ -63,7 +64,7 @@ final class FeedParser
  <id>' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '</id>
  <link rel="self" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" />
 ' . $hubLink . ' <title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>
- <updated>' . $published . '</updated>
+ <updated>' . $updated . '</updated>
  <published>' . $published . '</published>
 ' . $entries . '</feed>';
     }

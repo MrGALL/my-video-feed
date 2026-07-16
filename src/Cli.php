@@ -6,6 +6,9 @@ namespace App;
 
 final class Cli
 {
+    /** Bump with CHANGELOG.md and README's changelog line. */
+    public const VERSION = '0.5.6';
+
     /** @param list<int> $ingestHours */
     public function __construct(
         private readonly Db $db,
@@ -192,7 +195,7 @@ final class Cli
 
     private function usage(): int
     {
-        fwrite(STDERR, <<<TXT
+        fwrite(STDERR, 'Version ' . self::VERSION . "\n\n" . <<<TXT
         Usage: bin/myvideofeed <command> [args]
 
         Commands:
