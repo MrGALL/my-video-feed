@@ -229,4 +229,57 @@ final class FeedTest extends TestCase
 
         $this->assertStringContainsString('Cost $5 for a \\o/', $atom);
     }
+
+    /** Inserts a video with independent publish/ingest dates. @return string the published datetime used */
+    private function seedOrderedVideo(
+        Repository $repo,
+        Db $db,
+        int $channelId,
+        string $slug,
+        string $title,
+        int $publishedDaysAgo,
+        int $ingestedDaysAgo,
+    ): string {
+        $content = '<entry><title>placeholder</title>'
+            . '<media:group><media:thumbnail url="https://i.ytimg.com/vi/x/hqdefault.jpg"/></media:group></entry>';
+        $published = gmdate('Y-m-d H:i:s', time() - $publishedDaysAgo * 86400);
+        $updated = gmdate('Y-m-d H:i:s', time() - $ingestedDaysAgo * 86400);
+        $repo->insertVideo($channelId, $slug, $title, $content, null, $published);
+        $db->execute('UPDATE myvideofeed_videos SET updated = ? WHERE slug = ?', [$updated, $slug]);
+        return $published;
+    }
+
+    public function testAggregateOrdersEntriesByIngestTimeNotPublishTime(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $repo->insertChannel('UCabc', 'Cool Channel');
+        $channelId = (int) $repo->findChannel('UCabc')['id'];
+
+        // Published order is reversed from ingest order; ingest order must win.
+        $this->seedOrderedVideo($repo, $db, $channelId, 'oldpublish01', 'Old Upload', 10, 1);
+        $this->seedOrderedVideo($repo, $db, $channelId, 'newpublish01', 'New Upload', 1, 2);
+
+        $atom = $this->feedWith($repo)->renderAggregate();
+
+        $this->assertLessThan(strpos($atom, 'New Upload'), strpos($atom, 'Old Upload'));
+    }
+
+    public function testAggregateFeedUpdatedIsNewestPublishedNotFirstRow(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $repo->insertChannel('UCabc', 'Cool Channel');
+        $channelId = (int) $repo->findChannel('UCabc')['id'];
+
+        // Ingested first (so second in document order) but published most recently.
+        $this->seedOrderedVideo($repo, $db, $channelId, 'oldpublish02', 'Old Upload', 10, 1);
+        $newestPublished = $this->seedOrderedVideo($repo, $db, $channelId, 'newpublish02', 'New Upload', 1, 2);
+
+        $atom = $this->feedWith($repo)->renderAggregate();
+
+        $this->assertStringContainsString('<updated>' . gmdate('c', strtotime($newestPublished)) . '</updated>', $atom);
+    }
 }

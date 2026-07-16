@@ -2,9 +2,10 @@
 
 [![CI](https://github.com/mrgall/my-video-feed/actions/workflows/ci.yml/badge.svg)](https://github.com/mrgall/my-video-feed/actions/workflows/ci.yml)
 
-Aggregate YouTube channel uploads into a single filtered, chronological Atom
-feed (plus an HTML page), so you can follow subscriptions in publish order
-instead of YouTube's algorithmic homepage. It polls channel feeds (or receives
+Aggregate YouTube channel uploads into a single filtered Atom feed (plus an
+HTML page), sorted by when each video was ingested, so you can follow
+subscriptions in arrival order instead of YouTube's algorithmic homepage. It
+polls channel feeds (or receives
 [PubSubHubbub](https://en.wikipedia.org/wiki/PubSubHubbub) push), drops Shorts,
 livestreams, and blacklisted titles, and republishes the rest. Runs on SQLite by
 default; MySQL/MariaDB is optional.
@@ -116,6 +117,7 @@ bin/myvideofeed db:init                  Create the schema for the configured dr
 bin/myvideofeed cron                     Hourly entrypoint (respects cron.* gating)
 bin/myvideofeed ingest                   Force-process all active channels now
 bin/myvideofeed subscribe                Force-refresh PubSubHubbub subscriptions now
+bin/myvideofeed publish                  Force-notify the publisher hub now
 bin/myvideofeed video:info <id>          Print derived info for one video (duration, viewability, short flag)
 bin/myvideofeed channel:add <id>         Add a channel by YouTube channel id (UC...)
 bin/myvideofeed channel:list             List channels
@@ -145,6 +147,12 @@ composer check     # PSR-12 lint + PHPStan (level 6) + PHPUnit
 Or run the steps individually: `composer test`, `composer lint` (`composer lint:fix`
 to autofix), `composer analyse`. Tests use in-memory SQLite and run fully offline; CI
 runs the same checks on PHP 8.3 and 8.4.
+
+## Changelog
+
+**0.5.4** - Order videos by ingest time, not publish time.
+
+Full history in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

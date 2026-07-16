@@ -164,4 +164,45 @@ final class RepositoryTest extends TestCase
         $slugs = array_column($repo->recentVideosForChannel(), 'slug');
         $this->assertNotContains('vidnulled0002', $slugs);
     }
+
+    public function testRecentVideosForChannelOrdersByUpdatedNotPublished(): void
+    {
+        // A newly subscribed channel's backfilled video sorts above an older ingest, regardless of publish date.
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'Title');
+        $channelId = (int) $repo->findChannel('UC123')['id'];
+        $publishedOld = gmdate('Y-m-d H:i:s', time() - 10 * 86400);
+        $publishedRecent = gmdate('Y-m-d H:i:s', time() - 1 * 86400);
+        $ingestedFirst = gmdate('Y-m-d H:i:s', time() - 2 * 86400);
+        $ingestedSecond = $publishedRecent;
+
+        $repo->insertVideo($channelId, 'vidpubold001', 'Old', '<a/>', null, $publishedOld);
+        $this->setUpdated('vidpubold001', $ingestedFirst);
+        $repo->insertVideo($channelId, 'vidpubnew001', 'New', '<b/>', null, $publishedRecent);
+        $this->setUpdated('vidpubnew001', $ingestedSecond);
+
+        $slugs = array_column($repo->recentVideosForChannel(), 'slug');
+
+        $this->assertSame(['vidpubnew001', 'vidpubold001'], $slugs);
+    }
+
+    public function testRecentVideosForChannelTieBreaksSameUpdatedSecondByPublished(): void
+    {
+        // A backfill batch shares one `updated` second; within that tie, newest-published-first applies.
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'Title');
+        $channelId = (int) $repo->findChannel('UC123')['id'];
+        $sameIngest = gmdate('Y-m-d H:i:s', time() - 1 * 86400);
+        $olderPublished = gmdate('Y-m-d H:i:s', time() - 10 * 86400);
+        $newerPublished = gmdate('Y-m-d H:i:s', time() - 5 * 86400);
+
+        $repo->insertVideo($channelId, 'vidbackfill01', 'Older upload', '<a/>', null, $olderPublished);
+        $this->setUpdated('vidbackfill01', $sameIngest);
+        $repo->insertVideo($channelId, 'vidbackfill02', 'Newer upload', '<b/>', null, $newerPublished);
+        $this->setUpdated('vidbackfill02', $sameIngest);
+
+        $slugs = array_column($repo->recentVideosForChannel(), 'slug');
+
+        $this->assertSame(['vidbackfill02', 'vidbackfill01'], $slugs);
+    }
 }

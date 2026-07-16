@@ -133,7 +133,8 @@ final class Repository
         return $this->db->fetchAll(
             'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, v.content, v.published '
             . self::FROM_VIDEOS
-            . ' WHERE active = ? AND v.updated > ? AND v.content IS NOT NULL ORDER BY v.published DESC',
+            . ' WHERE active = ? AND v.updated > ? AND v.content IS NOT NULL'
+            . ' ORDER BY v.updated DESC, v.published DESC',
             [1, $cutoff],
         );
     }

@@ -60,17 +60,21 @@ final class Feed
 
     public function renderAggregate(): string
     {
-        $published = null;
+        $newestTs = null;
         $content = '';
         foreach ($this->visibleRecentVideos() as $video) {
             $video['content'] = $this->decorateContent($video);
-            $published ??= gmdate('c', strtotime($video['published']));
+            $ts = strtotime($video['published']);
+            // Videos are ingest-ordered, so the newest publish date isn't necessarily the first row's.
+            if ($newestTs === null || $ts > $newestTs) {
+                $newestTs = $ts;
+            }
             $content .= ' ' . $video['content'] . "\n";
         }
 
         return $this->parser->renderAtomFeed(
             $content,
-            $published,
+            $newestTs !== null ? gmdate('c', $newestTs) : null,
             $this->feedTitle,
             $this->feedUrl,
             $this->hubUrl,
