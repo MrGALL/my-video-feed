@@ -10,11 +10,18 @@ use PHPUnit\Framework\TestCase;
 
 final class RepositoryTest extends TestCase
 {
+    private Db $db;
+
     private function makeRepo(): Repository
     {
-        $db = new Db('sqlite', 'sqlite::memory:');
-        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
-        return new Repository($db);
+        $this->db = new Db('sqlite', 'sqlite::memory:');
+        $this->db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        return new Repository($this->db);
+    }
+
+    private function setUpdated(string $slug, string $updated): void
+    {
+        $this->db->execute('UPDATE myvideofeed_videos SET updated = ? WHERE slug = ?', [$updated, $slug]);
     }
 
     public function testInsertChannelIgnoresDuplicateSlug(): void
@@ -97,23 +104,64 @@ final class RepositoryTest extends TestCase
         $this->assertSame(['spam', 'unboxing'], $repo->blacklistTerms());
     }
 
-    public function testClearOldVideoContentNullsOutStaleContentOnly(): void
+    public function testClearOldVideoContentKeepsContentWhenOnlyPublishedIsStale(): void
+    {
+        // Backfilled video: published is already old but updated is fresh (ingested on first subscribe).
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'Title');
+        $channelId = (int) $repo->findChannel('UC123')['id'];
+
+        $old = gmdate('Y-m-d H:i:s', time() - 15 * 86400);
+        $repo->insertVideo($channelId, 'vidold000002', 'Old', '<content-old/>', null, $old);
+
+        $repo->clearOldVideoContent(14);
+
+        $bySlug = array_column($repo->recentVideosForChannel(), 'content', 'slug');
+        $this->assertSame('<content-old/>', $bySlug['vidold000002']);
+    }
+
+    public function testClearOldVideoContentNullsOutContentWhenBothColumnsAreStale(): void
     {
         $repo = $this->makeRepo();
         $repo->insertChannel('UC123', 'Title');
-        $channel = $repo->findChannel('UC123');
-        $channelId = (int) $channel['id'];
+        $channelId = (int) $repo->findChannel('UC123')['id'];
 
         $old = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
-        $recent = gmdate('Y-m-d H:i:s', time() - 1 * 86400);
         $repo->insertVideo($channelId, 'vidold000002', 'Old', '<content-old/>', null, $old);
+        $this->setUpdated('vidold000002', $old);
+
+        $repo->clearOldVideoContent(14);
+
+        $row = $this->db->fetchOne('SELECT content FROM myvideofeed_videos WHERE slug = ?', ['vidold000002']);
+        $this->assertNull($row['content']);
+    }
+
+    public function testClearOldVideoContentKeepsContentWhenBothColumnsAreRecent(): void
+    {
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'Title');
+        $channelId = (int) $repo->findChannel('UC123')['id'];
+
+        $recent = gmdate('Y-m-d H:i:s', time() - 1 * 86400);
         $repo->insertVideo($channelId, 'vidnew000002', 'Recent', '<content-new/>', null, $recent);
 
         $repo->clearOldVideoContent(14);
 
-        // Both were just inserted (updated = now), so both are within the 5-day window; only content differs.
         $bySlug = array_column($repo->recentVideosForChannel(), 'content', 'slug');
-        $this->assertNull($bySlug['vidold000002']);
         $this->assertSame('<content-new/>', $bySlug['vidnew000002']);
+    }
+
+    public function testRecentVideosForChannelSkipsNullContentRow(): void
+    {
+        $repo = $this->makeRepo();
+        $repo->insertChannel('UC123', 'Title');
+        $channelId = (int) $repo->findChannel('UC123')['id'];
+
+        $recent = gmdate('Y-m-d H:i:s', time() - 1 * 86400);
+        $repo->insertVideo($channelId, 'vidnulled0002', 'Nulled', '<content/>', null, $recent);
+        $this->db->execute('UPDATE myvideofeed_videos SET content = NULL WHERE slug = ?', ['vidnulled0002']);
+
+        $slugs = array_column($repo->recentVideosForChannel(), 'slug');
+        $this->assertNotContains('vidnulled0002', $slugs);
     }
 }

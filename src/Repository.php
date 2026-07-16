@@ -118,10 +118,11 @@ final class Repository
 
     public function clearOldVideoContent(int $days = 14): void
     {
+        // Both must be stale: a backfilled video keeps a recent `updated` and mustn't be pruned mid-read-window.
         $cutoff = gmdate('Y-m-d H:i:s', time() - $days * 86400);
         $this->db->execute(
-            'UPDATE myvideofeed_videos SET content = NULL WHERE published < ?',
-            [$cutoff],
+            'UPDATE myvideofeed_videos SET content = NULL WHERE published < ? AND updated < ?',
+            [$cutoff, $cutoff],
         );
     }
 
@@ -130,9 +131,9 @@ final class Repository
     {
         $cutoff = gmdate('Y-m-d H:i:s', time() - 5 * 86400);
         return $this->db->fetchAll(
-            'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, content, v.published '
+            'SELECT v.id, v.slug, v.duration, v.title, c.title as channel, v.content, v.published '
             . self::FROM_VIDEOS
-            . ' WHERE active = ? AND v.updated > ? ORDER BY v.published DESC',
+            . ' WHERE active = ? AND v.updated > ? AND v.content IS NOT NULL ORDER BY v.published DESC',
             [1, $cutoff],
         );
     }

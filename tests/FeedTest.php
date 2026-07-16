@@ -82,6 +82,29 @@ final class FeedTest extends TestCase
         $this->assertStringNotContainsString("src='x' onerror='", $atom);
     }
 
+    public function testAggregateOmitsVideoWithNulledContentInsteadOfCrashing(): void
+    {
+        $db = new Db('sqlite', 'sqlite::memory:');
+        $db->runScript(file_get_contents(dirname(__DIR__) . '/db/schema.sqlite.sql'));
+        $repo = new Repository($db);
+        $feed = new Feed(
+            repo: $repo,
+            parser: new FeedParser(),
+            minDurationSeconds: 30,
+            feedTitle: 'My Videos',
+            feedUrl: 'https://example.com/channels',
+            hubUrl: '',
+            timezone: 'UTC',
+        );
+        $this->seedVideo($repo);
+        // Simulate a backfilled video whose content has already been pruned (Feed must not crash on it).
+        $db->execute('UPDATE myvideofeed_videos SET content = NULL WHERE slug = ?', ['dQw4w9WgXcQ']);
+
+        $atom = $feed->renderAggregate();
+
+        $this->assertStringNotContainsString('Great Video', $atom);
+    }
+
     public function testRenderHtmlEmptyState(): void
     {
         [, $feed] = $this->makeFeed();
