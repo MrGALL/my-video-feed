@@ -17,7 +17,7 @@ default; MySQL/MariaDB is optional.
 - Single aggregate Atom feed (`/channels`) and HTML page (`/`) across all
   subscribed channels, with title cleanup, duration display, and optional
   thumbnail upgrade.
-- Title-substring blacklist plus minimum-duration and `detect_shorts` filters to
+- Title-substring blacklist plus min/max-duration and `detect_shorts` filters to
   drop Shorts.
 - Optional YouTube Data API v3 key for accurate duration and to skip
   livestreams/private videos.
@@ -86,7 +86,7 @@ Copy `config.example.php` to `config.php` (bare metal) or `.env.example` to
 | `feed.*` | Aggregate feed title |
 | `subscriber.*` | Optional PubSubHubbub subscribe; set `url` to enable, empty for poll-only |
 | `publisher.*` | Optional hub notify on change; set `url` to enable (also becomes the feed's hub link) |
-| `filter.*` | Min duration, title strip patterns, title prefix, `exclude_tags`, `upgrade_thumbnail`, `detect_shorts` |
+| `filter.*` | Min & max duration, title strip patterns, title prefix, `exclude_tags`, `upgrade_thumbnail`, `detect_shorts` |
 | `cron.*` | Hours `cron` ingests at, and the weekly subscribe-refresh day/hour |
 | `audit_log` | Where skipped videos (not-viewable or a detected Short) get logged |
 
@@ -150,7 +150,7 @@ runs the same checks on PHP 8.3 and 8.4.
 
 ## Changelog
 
-**0.5.6** - Make the feed's `<updated>` track ingest time instead of duplicating `<published>`.
+**0.5.7** - Add `max_duration_seconds` parameter to filter out overly long videos.
 
 Full history in [CHANGELOG.md](CHANGELOG.md).
 

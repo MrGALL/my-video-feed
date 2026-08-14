@@ -22,6 +22,7 @@ final class FeedTest extends TestCase
             repo: $repo,
             parser: new FeedParser(),
             minDurationSeconds: 30,
+            maxDurationSeconds: 60 * 60 * 24,
             feedTitle: 'My Videos',
             feedUrl: 'https://example.com/channels',
             hubUrl: '',
@@ -91,6 +92,7 @@ final class FeedTest extends TestCase
             repo: $repo,
             parser: new FeedParser(),
             minDurationSeconds: 30,
+            maxDurationSeconds: 60 * 60 * 24,
             feedTitle: 'My Videos',
             feedUrl: 'https://example.com/channels',
             hubUrl: '',
@@ -116,35 +118,49 @@ final class FeedTest extends TestCase
     {
         $video = ['title' => 'Some SPAM Video', 'duration' => '00:10:00'];
 
-        $this->assertTrue(Feed::isExcluded($video, ['spam'], 30));
+        $this->assertTrue(Feed::isExcluded($video, ['spam'], 30, 60 * 60 * 24));
     }
 
     public function testIncludesTitleNotMatchingBlacklist(): void
     {
         $video = ['title' => 'Regular Video', 'duration' => '00:10:00'];
 
-        $this->assertFalse(Feed::isExcluded($video, ['spam'], 30));
+        $this->assertFalse(Feed::isExcluded($video, ['spam'], 30, 60 * 60 * 24));
     }
 
-    public function testExcludesVideoAtOrUnderMinDuration(): void
+    public function testExcludesVideoUnderMinDuration(): void
     {
         $video = ['title' => 'Short', 'duration' => '00:00:25'];
 
-        $this->assertTrue(Feed::isExcluded($video, [], 30));
+        $this->assertTrue(Feed::isExcluded($video, [], 30, 60 * 60 * 24));
     }
 
     public function testIncludesVideoOverMinDuration(): void
     {
         $video = ['title' => 'Long enough', 'duration' => '00:00:35'];
 
-        $this->assertFalse(Feed::isExcluded($video, [], 30));
+        $this->assertFalse(Feed::isExcluded($video, [], 30, 60 * 60 * 24));
+    }
+
+    public function testIncludesVideoUnderMaxDuration(): void
+    {
+        $video = ['title' => 'Short', 'duration' => '23:59:59'];
+
+        $this->assertFalse(Feed::isExcluded($video, [], 30, 60 * 60 * 24));
+    }
+
+    public function testExcludesVideoOverMaxDuration(): void
+    {
+        $video = ['title' => 'Long enough', 'duration' => '24:00:01'];
+
+        $this->assertTrue(Feed::isExcluded($video, [], 30, 60 * 60 * 24));
     }
 
     public function testIncludesVideoWithNoDurationInfo(): void
     {
         $video = ['title' => 'Unknown duration', 'duration' => null];
 
-        $this->assertFalse(Feed::isExcluded($video, [], 30));
+        $this->assertFalse(Feed::isExcluded($video, [], 30, 60 * 60 * 24));
     }
 
     public function testMinutesParsesHoursAndMinutes(): void
@@ -160,6 +176,7 @@ final class FeedTest extends TestCase
             repo: $repo,
             parser: new FeedParser(),
             minDurationSeconds: 30,
+            maxDurationSeconds: 60 * 60 * 24,
             feedTitle: 'T',
             feedUrl: 'https://example.com/channels',
             hubUrl: '',

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.7 - 2026-08-13
+Add `max_duration_seconds` parameter to filter out overly long videos.
+
 ## 0.5.6 - 2026-07-16
 Make the feed's `<updated>` track ingest time instead of duplicating `<published>`.
 

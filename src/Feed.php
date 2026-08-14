@@ -11,6 +11,7 @@ final class Feed
         private readonly Repository $repo,
         private readonly FeedParser $parser,
         private readonly int $minDurationSeconds,
+        private readonly int $maxDurationSeconds,
         private readonly string $feedTitle,
         private readonly string $feedUrl,
         private readonly string $hubUrl,
@@ -25,7 +26,7 @@ final class Feed
      * @param array{title: string, duration?: ?string} $video
      * @param list<string> $blacklistTerms
      */
-    public static function isExcluded(array $video, array $blacklistTerms, int $minDurationSeconds): bool
+    public static function isExcluded(array $video, array $blacklistTerms, int $minDurationSeconds, int $maxDurationSeconds): bool
     {
         foreach ($blacklistTerms as $term) {
             if (stripos($video['title'], $term) !== false) {
@@ -35,7 +36,7 @@ final class Feed
         if (!empty($video['duration'])) {
             // Parse HH:MM:SS as a UTC timestamp anchored at 1970-01-01 so it equals total seconds.
             $time = strtotime('1970-01-01 ' . $video['duration'] . 'UTC');
-            if ($time > 0 && $time <= $minDurationSeconds) {
+            if ($time > 0 && ($time <= $minDurationSeconds || $time >= $maxDurationSeconds)) {
                 return true;
             }
         }
@@ -54,7 +55,7 @@ final class Feed
         $blacklist = $this->repo->blacklistTerms();
         return array_values(array_filter(
             $this->repo->recentVideosForChannel(),
-            fn (array $video): bool => !self::isExcluded($video, $blacklist, $this->minDurationSeconds),
+            fn (array $video): bool => !self::isExcluded($video, $blacklist, $this->minDurationSeconds, $this->maxDurationSeconds),
         ));
     }
 
@@ -226,7 +227,7 @@ h1 { font-size:1.4rem; margin:0 0 20px; }
         $blacklist = $this->repo->blacklistTerms();
         $out = '';
         foreach ($videos as $video) {
-            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds) !== $keepExcluded) {
+            if (self::isExcluded($video, $blacklist, $this->minDurationSeconds, $this->maxDurationSeconds) !== $keepExcluded) {
                 continue;
             }
             if ($stripTitles) {

@@ -91,7 +91,7 @@ final class AppTest extends TestCase
         $repo = new Repository($db);
         $api = new FakeYoutubeApi();
         $ingestor = new Ingestor($repo, $api, new FeedParser(), new FakeHub(), '', 'UTC', false);
-        $feed = new Feed($repo, new FeedParser(), 30, 'Test Feed', 'https://example.com/channels', '');
+        $feed = new Feed($repo, new FeedParser(), 30, 60 * 60 * 24, 'Test Feed', 'https://example.com/channels', '');
         return [new App($ingestor, $feed, $basePath), $repo, $api];
     }
 

@@ -59,6 +59,7 @@ final class Bootstrap
             repo: $repo,
             parser: $parser,
             minDurationSeconds: $config['filter']['min_duration_seconds'],
+            maxDurationSeconds: $config['filter']['max_duration_seconds'],
             feedTitle: $config['feed']['title'],
             feedUrl: $feedUrl,
             // The feed's <link rel="hub"> is the same hub the publisher notifies.
@@ -113,6 +114,7 @@ final class Bootstrap
             'publisher' => ['url' => ''],
             'filter' => [
                 'min_duration_seconds' => 30,
+                'max_duration_seconds' => 60 * 60 * 24,
                 'detect_shorts' => false,
                 'strip_patterns' => [],
                 'max_title_length' => 78,
