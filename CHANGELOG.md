@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.8 - 2026-08-15
+Add `noindex`, `nofollow` robots meta tag to the HTML page.
+
 ## 0.5.7 - 2026-08-13
 Add `max_duration_seconds` parameter to filter out overly long videos.
 

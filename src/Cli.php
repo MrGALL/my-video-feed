@@ -7,7 +7,7 @@ namespace App;
 final class Cli
 {
     /** Bump with CHANGELOG.md and README's changelog line. */
-    public const VERSION = '0.5.7';
+    public const VERSION = '0.5.8';
 
     /** @param list<int> $ingestHours */
     public function __construct(

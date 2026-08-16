@@ -150,7 +150,7 @@ runs the same checks on PHP 8.3 and 8.4.
 
 ## Changelog
 
-**0.5.7** - Add `max_duration_seconds` parameter to filter out overly long videos.
+**0.5.8** - Add `noindex`, `nofollow` robots meta tag to the HTML page.
 
 Full history in [CHANGELOG.md](CHANGELOG.md).
 
